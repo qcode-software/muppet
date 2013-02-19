@@ -1,0 +1,16 @@
+#!/usr/bin/tclsh8.5
+
+# usage 
+# $ muppet command
+
+package require Tcl 8.5
+package require muppet 
+package require qcode
+namespace import qc::*
+namespace import muppet::*
+
+namespace eval muppet {	
+    puts [[lindex $argv 0] {*}[string map [list "\\{" "{" "\\}" "}"] [lrange $argv 1 end]]]
+}
+
+return 0
