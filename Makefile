@@ -1,6 +1,6 @@
 NAME=muppet
 VERSION=1.0
-PACKAGEDIR=muppet
+PACKAGEDIR=tcl
 MAINTAINER=hackers@qcode.co.uk
 RELEASE=$(shell cat RELEASE)
 REMOTEUSER=debian.qcode.co.uk
