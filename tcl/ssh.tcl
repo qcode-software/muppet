@@ -31,17 +31,17 @@ proc muppet::ssh_user_public_key {user private_key} {
 }
 
 proc muppet::ssh_user_authorize_key {user key} {
-    if { $user eq "root" } {
-	set ssh_path /root/.ssh 
-    } else { 
-	set ssh_path /home/$user/.ssh  
-    } 
-    if { ![file exists $ssh_path] } {
-	file mkdir $ssh_path
-	file attributes $ssh_path -owner $user -group $user -permissions 0700
-    }
-    if { ![file exists $ssh_path/authorized_keys] || ![file_contains_line $ssh_path/authorized_keys $key] } {
-	file_append ${ssh_path}/authorized_keys $key
-	file attributes $ssh_path/authorized_keys -owner $user -group $user -permissions 0644
+    if { [muppet::user_exists $user] } {
+        set ssh_path "[muppet::user_home $user]/.ssh"
+        if { ![file exists $ssh_path] } {
+	    file mkdir $ssh_path
+	    file attributes $ssh_path -owner $user -group $user -permissions 0700
+        }
+        if { ![file exists $ssh_path/authorized_keys] || ![file_contains_line $ssh_path/authorized_keys $key] } {
+	    file_append ${ssh_path}/authorized_keys $key
+	    file attributes $ssh_path/authorized_keys -owner $user -group $user -permissions 0644
+        }
+    } else {
+        error "No such user $user"
     }
 } 

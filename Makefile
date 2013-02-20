@@ -15,10 +15,10 @@ package:
 
 install:
 	./pkg_mkIndex $(PACKAGEDIR)
-	mkdir -p /usr/lib/tcltk/$(PACKAGEDIR)$(VERSION)
-	rm -f /usr/lib/tcltk/$(PACKAGEDIR)$(VERSION)/*
-	cp $(PACKAGEDIR)/*.tcl /usr/lib/tcltk/$(PACKAGEDIR)$(VERSION)/
-	cp LICENSE /usr/lib/tcltk/$(PACKAGEDIR)$(VERSION)/
+	mkdir -p /usr/lib/tcltk/$(NAME)$(VERSION)
+	rm -f /usr/lib/tcltk/$(NAME)$(VERSION)/*
+	cp $(PACKAGEDIR)/*.tcl /usr/lib/tcltk/$(NAME)$(VERSION)/
+	cp LICENSE /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp bin/muppet /usr/local/bin/muppet
 	cp muppet.tcl.conf /etc/muppet.tcl
 
@@ -33,5 +33,5 @@ incr-release:
 	./incr-release-number.tcl
 
 uninstall:
-	rm -r /usr/lib/tcltk/$(PACKAGEDIR)$(VERSION)
+	rm -r /usr/lib/tcltk/$(NAME)$(VERSION)
 	rm /usr/local/bin/muppet

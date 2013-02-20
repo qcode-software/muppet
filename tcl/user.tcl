@@ -47,3 +47,8 @@ proc muppet::user_groups { user args } {
     }
     return [::exec groups $user | sed "s/$user *: *//g"]
 }
+
+proc muppet::user_home { user } { 
+    #| Return home directory of user
+    return [exec su -l -c pwd $user]
+}
