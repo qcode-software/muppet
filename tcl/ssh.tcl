@@ -67,6 +67,9 @@ proc muppet::ssh_private_repo { repo repo_host } {
     set key [http_get http://${key_location}/id_${repo}_rsa]
     puts "..found id_${repo}_rsa"
     set key_path "/root/.ssh/id_${repo}_rsa"
+    if { ![file exists /root/.ssh] } {
+        file mkdir /root/.ssh
+    }
     file_write $key_path $key 0600
 
     # Decrypt the key on disk for passwordless operation
