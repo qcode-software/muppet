@@ -2,26 +2,24 @@ package provide muppet 1.0
 package require qcode 1.8
 namespace eval muppet {}
 
-proc muppet::ssh_user_private_key {user private_key} {
-    if { $user eq "root" } {
-	set ssh_path /root/.ssh 
-    } else { 
-	set ssh_path /home/$user/.ssh  
-    } 
+proc muppet::ssh_user_private_key { user private_key {keyname "id_rsa"}} {
+    #| Writes a private key to disk, decrypting it if encrypted
+    set ssh_path "[muppet::user_home $user]/.ssh"
     if { ![file exists $ssh_path] } {
 	file mkdir $ssh_path
 	file attributes $ssh_path -owner $user -group $user -permissions 0700
     }
-    file_write $ssh_path/id_rsa $private_key 0600 
-    file attributes $ssh_path/id_rsa -owner ${user} -group ${user} -permissions 0600
+    file_write ${ssh_path}/$keyname $private_key 0600 
+    file attributes ${ssh_path}/$keyname -owner ${user} -group ${user} -permissions 0600
+    # Is the key encrypted?
+    if { [regexp -line {^Proc-Type:\s+\d,ENCRYPTED$} $private_key] } {
+        # Decrypt the key on disk
+        sh ssh-keygen -p -N "" -f ${ssh_path}/$keyname
+    }
 }
 
 proc muppet::ssh_user_public_key {user private_key} {
-    if { $user eq "root" } {
-	set ssh_path /root/.ssh 
-    } else { 
-	set ssh_path /home/$user/.ssh  
-    } 
+    set ssh_path "[muppet::user_home $user]/.ssh"
     if { ![file exists $ssh_path] } {
 	file mkdir $ssh_path
 	file attributes $ssh_path -owner $user -group $user -permissions 0700
@@ -66,15 +64,7 @@ proc muppet::ssh_private_repo { repo repo_host } {
     set key_location [gets_with_timeout 100000 ""]
     set key [http_get http://${key_location}/id_${repo}_rsa]
     puts "..found id_${repo}_rsa"
-    set key_path "/root/.ssh/id_${repo}_rsa"
-    if { ![file exists /root/.ssh] } {
-        file mkdir /root/.ssh
-    }
-    file_write $key_path $key 0600
-
-    # Decrypt the key on disk for passwordless operation
-    # TODO We could use keychain to do this in memory only
-    exec ssh-keygen -p -f $key_path
+    ssh_user_private_key root $key "id_${repo}_rsa"
 
     set ssh_config "Host ${repo}_repo
 HostName $repo_host
