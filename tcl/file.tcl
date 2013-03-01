@@ -128,25 +128,31 @@ proc muppet::file_config_update {filename args} {
     set append_lines {}
    
     foreach {name value} $args {
-	set regexp_active [string map [list name $name] {^[ \t]*name[ \t]*=[ \t]*([^'" \t]*|['"][^'"]*['"])(.*$)}]
-	set regexp_disabled [string map [list name $name] {^[ \t]*#[ \t]*name[ \t]*=[ \t]*([^'" \t]*|['"][^'"]*['"])(.*$)}]
+	set regexp_active [string map [list name $name] {^[ \t]*name[ \t]*([= \t])[ \t]*([^'" \t]*|['"][^'"]*['"])(.*$)}]
+	set regexp_disabled [string map [list name $name] {^[ \t]*#[ \t]*name[ \t]*([= \t])[ \t]*([^'" \t]*|['"][^'"]*['"])(.*$)}]
 	if { [regexp -line -all $regexp_active $config] > 1 } {
 	    error "Multiple active params exist for \"$name\", name must be unique in $filename."
 	} 
 
 	if { [regexp -line $regexp_active $config] } {
 	    # active parameter exists - update value.
-	    regsub -line $regexp_active $config "${name}=${value}\\2" config
+	    regsub -line $regexp_active $config "${name}\\1${value}\\3" config
 	} elseif { [regexp -line $regexp_disabled $config] } {
 	    # disabled paramter exists - uncomment and update value.
-	    regsub -line $regexp_disabled $config "${name}=${value}\\2" config
+	    regsub -line $regexp_disabled $config "${name}\\1${value}\\3" config
 	} else {
 	    # parameter doesn't exist - append to config file
+            # Guess the separator by counting active lines using '='
+            if { [regexp -line -all -- {(?:^[ \t]*[^#\t][^\t]+[ \t]*)=(?:[ \t]*)(?:[^'" \t]*|['"][^'"]*['"])(?:.*$)} $config]> 0 } {
+                set separator "="
+            } else {
+                set separator " "
+            }
 	    if {[regexp {\r?\n[ \t]*$} $config] } {
 		# config ends with a newline
-		append config "${name}=${value}"
+		append config "${name}${separator}${value}"
 	    } else {
-		append config "\n${name}=${value}"
+		append config "\n${name}${separator}${value}"
 	    }
 	}
     }
