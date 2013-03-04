@@ -116,7 +116,7 @@ proc muppet::file_link { link target } {
     file link $link $target
 }
 
-proc muppet::file_config_update {filename args} {
+proc muppet::config_update {filename args} {
     #| Modify or append uniquely named config params specified as name value pairs in args.
     # Return updated config. 
     # Error if param name is not unique within config. 
