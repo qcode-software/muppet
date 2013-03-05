@@ -44,6 +44,63 @@ proc muppet::ssh_user_authorize_key {user key} {
     }
 } 
 
+proc muppet::ssh_user_config {method user host args} {
+    #| sets ssh_config $host clause in $user's .ssh dir
+    # eg. ssh_user_config set root muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa
+    # will add the following to ~/.ssh/config in root's home dir.
+    # Host muppet_repo
+    # Hostname debian.qcode.co.uk
+    # User muppet
+    # IdentityFile ~/.ssh/id_muppet_rsa
+    # Assumptions:
+    #  - each host clause is named uniquely
+    #  - any global setting appear at the beginning of the file
+    #  - doesn't support regular expression Host matching yet
+
+    set config_path "[user_home $user]/.ssh"
+    set config_file "$config_path/config"
+    if { ![file exists $config_path] } {
+        sh mkdir $config_path
+    }
+    if { ![file exists $config_file } {
+        # config is new
+        sh touch $config_file
+        set config ""
+    } else {
+        # config exists
+        set config [muppet::cat $config_file]
+        # get any global settings
+        # regexp -nocase {.*?(?:(?=\nHost )|(?=$))} $config global_settings
+        regexp -nocase "\\nHost\\s+?${host}\\s*?\\n.*?(?:(?=\\nHost )|(?=$))" $config host_clause
+    }
+
+    switch $method {
+        set {
+            # Clause is being set. Delete $host_clause if exists and recreate.
+            set host_clause_new "
+host $host"
+            foreach {name value} $args {
+                append host_clause_new "
+$name $value
+"
+            }
+            if { ![regsub $host_clause $config $host_clause_new config] } {
+                append config $host_clause_new
+            }
+
+        }
+        update {
+            # Clause is being updated. $host_clause will be changed and rewritten.
+        }
+        delete {
+            # Clause is being deleted. $host_clause will be removed.
+        }
+        default {
+            error "Unknown method. Must be one of set, update or delete."
+        }
+    }
+}
+
 proc muppet::ssh_private_repo { repo repo_host } {
     #| Set up access to a ssh private repo for the root user.
     #
