@@ -1,0 +1,115 @@
+package require tcltest
+eval ::tcltest::configure $argv
+# Ensure package is loaded from ./tcl rather than /usr/lib/tcltk
+set auto_path [linsert $auto_path 0 ./tcl]
+package require muppet
+namespace import muppet::*
+
+namespace eval ::muppet::test {
+    namespace import ::tcltest::*
+
+    test ssh_user_config-1.0 {
+        set to empty config
+    } -setup {
+        exec useradd -m muppet_test_user
+    } -body {
+        muppet::ssh_user_config set muppet_test_user muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa 
+        set fh [open /home/muppet_test_user/.ssh/config r]
+        set config [read $fh]
+        close $fh
+        set config
+    } -output {writing /home/muppet_test_user/.ssh/config ...written
+} -cleanup {
+        exec userdel -r muppet_test_user
+    } -result {host muppet_repo
+hostname debian.qcode.co.uk
+user muppet
+identityfile ~/.ssh/id_muppet_rsa
+
+}
+
+    test ssh_user_config-1.1 {
+        set new clause to populated config
+    } -setup {
+        exec useradd -m muppet_test_user
+    } -body {
+        muppet::ssh_user_config set muppet_test_user muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa 
+        muppet::ssh_user_config set muppet_test_user test_repo HostName test.qcode.co.uk User test IdentityFile ~/.ssh/id_muppet_rsa 
+        set fh [open /home/muppet_test_user/.ssh/config r]
+        set config [read $fh]
+        close $fh
+        set config
+    } -output {writing /home/muppet_test_user/.ssh/config ...written
+writing /home/muppet_test_user/.ssh/config ...written
+} -cleanup {
+        exec userdel -r muppet_test_user
+    } -result {host muppet_repo
+hostname debian.qcode.co.uk
+user muppet
+identityfile ~/.ssh/id_muppet_rsa
+
+host test_repo
+hostname test.qcode.co.uk
+user test
+identityfile ~/.ssh/id_muppet_rsa
+
+}
+
+    test ssh_user_config-1.1 {
+        update to populated config
+    } -setup {
+        exec useradd -m muppet_test_user
+    } -body {
+        muppet::ssh_user_config set muppet_test_user muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa 
+        muppet::ssh_user_config set muppet_test_user test_repo HostName test.qcode.co.uk User test IdentityFile ~/.ssh/id_muppet_rsa 
+        muppet::ssh_user_config update muppet_test_user muppet_repo User updated_user IdentityFile ~/.ssh/id_updated_rsa 
+        set fh [open /home/muppet_test_user/.ssh/config r]
+        set config [read $fh]
+        close $fh
+        set config
+    } -output {writing /home/muppet_test_user/.ssh/config ...written
+writing /home/muppet_test_user/.ssh/config ...written
+writing /home/muppet_test_user/.ssh/config ...written
+} -cleanup {
+        exec userdel -r muppet_test_user
+    } -result {host muppet_repo
+hostname debian.qcode.co.uk
+user updated_user
+identityfile ~/.ssh/id_updated_rsa
+
+host test_repo
+hostname test.qcode.co.uk
+user test
+identityfile ~/.ssh/id_muppet_rsa
+
+}
+
+    test ssh_user_config-1.2 {
+        delete from populated config
+    } -setup {
+        exec useradd -m muppet_test_user
+    } -body {
+        muppet::ssh_user_config set muppet_test_user muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa 
+        muppet::ssh_user_config set muppet_test_user test_repo HostName test.qcode.co.uk User test IdentityFile ~/.ssh/id_muppet_rsa 
+        muppet::ssh_user_config delete muppet_test_user muppet_repo 
+        set fh [open /home/muppet_test_user/.ssh/config r]
+        set config [read $fh]
+        close $fh
+        set config
+    } -output {writing /home/muppet_test_user/.ssh/config ...written
+writing /home/muppet_test_user/.ssh/config ...written
+writing /home/muppet_test_user/.ssh/config ...written
+} -cleanup {
+        exec userdel -r muppet_test_user
+    } -result {
+
+host test_repo
+hostname test.qcode.co.uk
+user test
+identityfile ~/.ssh/id_muppet_rsa
+
+}
+
+    cleanupTests
+}
+namespace delete ::muppet::test

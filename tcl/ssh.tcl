@@ -57,12 +57,12 @@ proc muppet::ssh_user_config {method user host args} {
     #  - any global setting appear at the beginning of the file
     #  - doesn't support regular expression Host matching yet
 
-    set config_path "[user_home $user]/.ssh"
+    set config_path "[muppet::user_home $user]/.ssh"
     set config_file "$config_path/config"
     if { ![file exists $config_path] } {
         sh mkdir $config_path
     }
-    if { ![file exists $config_file } {
+    if { ![file exists $config_file] } {
         # config is new
         sh touch $config_file
         set config ""
@@ -70,35 +70,57 @@ proc muppet::ssh_user_config {method user host args} {
         # config exists
         set config [muppet::cat $config_file]
         # get any global settings
-        # regexp -nocase {.*?(?:(?=\nHost )|(?=$))} $config global_settings
-        regexp -nocase "\\nHost\\s+?${host}\\s*?\\n.*?(?:(?=\\nHost )|(?=$))" $config host_clause
+        # {1,1}? required to specify non-greedy matching over the whole RE
+        regexp -nocase "(?:(?:^|\\n)\\s*Host\\s+${host}\\s+.*(?:(?=\\n\\s*Host\\s)|$)){1,1}?" $config host_clause
+        if { [info exists host_clause] } {
+        set host_clause [string trim $host_clause]
+        }
     }
-
+    
     switch $method {
         set {
-            # Clause is being set. Delete $host_clause if exists and recreate.
-            set host_clause_new "
-host $host"
-            foreach {name value} $args {
-                append host_clause_new "
-$name $value
-"
+            # Clause is being set. Replace $host_clause if exists.
+            set host_dict [qc::lower $args]
+            dict set host_dict host $host
+            set new_host_clause [muppet::ssh_user_config_host_dict2clause $host_dict]
+            if { [info exists host_clause] } {
+                set config [string map [subst -nobackslashes -nocommands {{$host_clause} {$new_host_clause}}] $config]
+            } else {
+                append config "$new_host_clause\n\n"
             }
-            if { ![regsub $host_clause $config $host_clause_new config] } {
-                append config $host_clause_new
-            }
-
         }
         update {
             # Clause is being updated. $host_clause will be changed and rewritten.
+            set host_dict [qc::lower [string trim $host_clause]]
+            # Update host_dict
+            foreach {name value} [qc::lower $args] {
+                dict set host_dict $name $value
+            }
+            # get new host clause from updated dict
+            set new_host_clause [muppet::ssh_user_config_host_dict2clause $host_dict]
+            # Substitute old host_clause for new
+            set config [string map [subst -nobackslashes -nocommands {{$host_clause} {$new_host_clause}}] $config]
         }
         delete {
             # Clause is being deleted. $host_clause will be removed.
+            set config [string map [subst -nocommands -nobackslashes {{$host_clause} {}}] $config]
         }
         default {
             error "Unknown method. Must be one of set, update or delete."
         }
     }
+
+    file_write $config_file $config
+}
+
+proc muppet::ssh_user_config_host_dict2clause { host_dict} {
+    set result "host [dict get $host_dict host]"
+    dict unset host_dict host
+    foreach { key } [dict keys $host_dict] {
+        append result "
+$key [dict get $host_dict $key]"
+    }
+    return "$result"
 }
 
 proc muppet::ssh_private_repo { repo repo_host } {

@@ -50,5 +50,10 @@ proc muppet::user_groups { user args } {
 
 proc muppet::user_home { user } { 
     #| Return home directory of user
-    return [exec su -l -c pwd $user]
+    if { $user ne [qc::my username] } {
+        # Must be run as root to get home directories of other users
+        return [exec su -l -c pwd $user]
+    } else {
+        return ~
+    }
 }
