@@ -10,6 +10,8 @@ namespace eval ::muppet::test {
 
     test ssh_user_config-1.0 {
         set to empty config
+    } -constraints {
+        root 
     } -setup {
         exec useradd -m muppet_test_user
     } -body {
@@ -30,6 +32,8 @@ identityfile ~/.ssh/id_muppet_rsa
 
     test ssh_user_config-1.1 {
         set new clause to populated config
+    } -constraints {
+        root 
     } -setup {
         exec useradd -m muppet_test_user
     } -body {
@@ -55,8 +59,10 @@ identityfile ~/.ssh/id_muppet_rsa
 
 }
 
-    test ssh_user_config-1.1 {
+    test ssh_user_config-1.2 {
         update to populated config
+    } -constraints {
+        root 
     } -setup {
         exec useradd -m muppet_test_user
     } -body {
@@ -84,8 +90,10 @@ identityfile ~/.ssh/id_muppet_rsa
 
 }
 
-    test ssh_user_config-1.2 {
+    test ssh_user_config-1.3 {
         delete from populated config
+    } -constraints {
+        root 
     } -setup {
         exec useradd -m muppet_test_user
     } -body {
