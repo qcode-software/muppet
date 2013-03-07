@@ -54,8 +54,6 @@ proc muppet::ssh_user_config {method user host args} {
     # IdentityFile ~/.ssh/id_muppet_rsa
     # Assumptions:
     #  - each host clause is named uniquely
-    #  - any global setting appear at the beginning of the file
-    #  - doesn't support regular expression Host matching yet
 
     set config_path "[muppet::user_home $user]/.ssh"
     set config_file "$config_path/config"
@@ -69,14 +67,18 @@ proc muppet::ssh_user_config {method user host args} {
     } else {
         # config exists
         set config [muppet::cat $config_file]
-        # get any global settings
-        # {1,1}? required to specify non-greedy matching over the whole RE
-        regexp -nocase "(?:(?:^|\\n)\\s*Host\\s+${host}\\s+.*(?:(?=\\n\\s*Host\\s)|$)){1,1}?" $config host_clause
-        if { [info exists host_clause] } {
-        set host_clause [string trim $host_clause]
-        }
     }
+    file_write $config_file [muppet::ssh_user_config_transform $config $method $host {*}$args]
+}
     
+proc muppet::ssh_user_config_transform {config method host args} {
+
+    # {1,1}? required to specify non-greedy matching over the whole RE
+    regexp -nocase "(?:(?:^|\\n)\\s*Host\\s+${host}\\s+.*(?:(?=\\n\\s*Host\\s)|$)){1,1}?" $config host_clause
+    if { [info exists host_clause] } {
+
+        set host_clause [string trim $host_clause]
+    }
     switch $method {
         set {
             # Clause is being set. Replace $host_clause if exists.
@@ -110,7 +112,7 @@ proc muppet::ssh_user_config {method user host args} {
         }
     }
 
-    file_write $config_file $config
+    return $config
 }
 
 proc muppet::ssh_user_config_host_dict2clause { host_dict} {
