@@ -80,8 +80,8 @@ proc muppet::ssh_user_config {method user host args} {
     switch $method {
         set {
             # Clause is being set. Replace $host_clause if exists.
-            set host_dict [qc::lower $args]
-            dict set host_dict host $host
+            # Build host dict - host must always be first
+            set host_dict [dict create host $host {*}[qc::lower $args]]
             set new_host_clause [muppet::ssh_user_config_host_dict2clause $host_dict]
             if { [info exists host_clause] } {
                 set config [string map [subst -nobackslashes -nocommands {{$host_clause} {$new_host_clause}}] $config]
@@ -114,13 +114,11 @@ proc muppet::ssh_user_config {method user host args} {
 }
 
 proc muppet::ssh_user_config_host_dict2clause { host_dict} {
-    set result "host [dict get $host_dict host]"
-    dict unset host_dict host
-    foreach { key } [dict keys $host_dict] {
-        append result "
-$key [dict get $host_dict $key]"
+    set lines {}
+    dict for {key value} $host_dict {
+        lappend lines "$key $value"
     }
-    return "$result"
+    return [join $lines \n]
 }
 
 proc muppet::ssh_private_repo { repo repo_host } {
@@ -144,24 +142,8 @@ proc muppet::ssh_private_repo { repo repo_host } {
     set key [http_get http://${key_location}/id_${repo}_rsa]
     puts "..found id_${repo}_rsa"
     ssh_user_private_key root $key "id_${repo}_rsa"
-
-    set ssh_config "Host ${repo}_repo
-HostName $repo_host
-User $repo
-IdentityFile ~/.ssh/id_${repo}_rsa
-
-"
-    set ssh_config_file "/root/.ssh/config"
-    if { ![file exists $ssh_config_file] } {
-        file_write $ssh_config_file $ssh_config
-    } else {
-        if { ![file_contains_line $ssh_config_file "IdentityFile ~/.ssh/id_${repo}_rsa" ] } {
-            # File exists, prepend entry to config
-            set file_contents [muppet::cat $ssh_config_file]
-            append ssh_config $file_contents
-            file_write $ssh_config_file $ssh_config
-        }
-    }
+    
+    muppet::ssh_user_config set root ${repo}_repo HostName $repo_host User $repo IdentityFile ~/.ssh/id_${repo}_rsa
     
     # Add to sources.list
     set repo_source "deb ssh://${repo}_repo:/home/${repo}/ squeeze main"
