@@ -2,19 +2,19 @@ package provide muppet 1.0
 package require qcode 1.8
 namespace eval muppet {}
 
-proc muppet::ssh_user_private_key { user private_key {keyname "id_rsa"}} {
+proc muppet::ssh_user_private_key { user private_key {filename "id_rsa"}} {
     #| Writes a private key to disk, decrypting it if encrypted
     set ssh_path "[muppet::user_home $user]/.ssh"
     if { ![file exists $ssh_path] } {
 	file mkdir $ssh_path
 	file attributes $ssh_path -owner $user -group $user -permissions 0700
     }
-    file_write ${ssh_path}/$keyname $private_key 0600 
-    file attributes ${ssh_path}/$keyname -owner ${user} -group ${user} -permissions 0600
+    file_write ${ssh_path}/$filename $private_key 0600 
+    file attributes ${ssh_path}/$filename -owner ${user} -group ${user} -permissions 0600
     # Is the key encrypted?
     if { [regexp -line {^Proc-Type:\s+\d,ENCRYPTED$} $private_key] } {
         # Decrypt the key on disk
-        sh ssh-keygen -p -N "" -f ${ssh_path}/$keyname
+        sh ssh-keygen -p -N "" -f ${ssh_path}/$filename
     }
 }
 
@@ -28,15 +28,15 @@ proc muppet::ssh_user_public_key {user private_key} {
     file attributes $ssh_path/id_rsa.pub -owner ${user} -group ${user} -permissions 0600
 }
 
-proc muppet::ssh_user_authorize_key {user key} {
+proc muppet::ssh_user_authorize_key {user public_key} {
     if { [muppet::user_exists $user] } {
         set ssh_path "[muppet::user_home $user]/.ssh"
         if { ![file exists $ssh_path] } {
 	    file mkdir $ssh_path
 	    file attributes $ssh_path -owner $user -group $user -permissions 0700
         }
-        if { ![file exists $ssh_path/authorized_keys] || ![file_contains_line $ssh_path/authorized_keys $key] } {
-	    file_append ${ssh_path}/authorized_keys $key
+        if { ![file exists $ssh_path/authorized_keys] || ![file_contains_line $ssh_path/authorized_keys $public_key] } {
+	    file_append ${ssh_path}/authorized_keys $public_key
 	    file attributes $ssh_path/authorized_keys -owner $user -group $user -permissions 0644
         }
     } else {
@@ -45,16 +45,8 @@ proc muppet::ssh_user_authorize_key {user key} {
 } 
 
 proc muppet::ssh_user_config {method user host args} {
-    #| sets ssh_config $host clause in $user's .ssh dir
-    # eg. ssh_user_config set root muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa
-    # will add the following to ~/.ssh/config in root's home dir.
-    # Host muppet_repo
-    # Hostname debian.qcode.co.uk
-    # User muppet
-    # IdentityFile ~/.ssh/id_muppet_rsa
-    # Assumptions:
-    #  - each host clause is named uniquely
-
+    #| Create or modify a Host clause in the user's ssh_config ~/.ssh/config
+    # Each Host cluase must be uniquely named
     set config_path "[muppet::user_home $user]/.ssh"
     set config_file "$config_path/config"
     if { ![file exists $config_path] } {
@@ -70,23 +62,32 @@ proc muppet::ssh_user_config {method user host args} {
     }
     file_write $config_file [muppet::ssh_user_config_transform $config $method $host {*}$args]
 }
-    
-proc muppet::ssh_user_config_transform {config method host args} {
 
+doc muppet::ssh_user_config {
+    Usage {set|update|delete user host ?config_name value? ?config_name value?}
+    Example {
+        % ssh_user_config set root muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa
+        # will add the following to ~/.ssh/config in root's home dir.
+        Host muppet_repo
+        Hostname debian.qcode.co.uk
+        User muppet
+        IdentityFile ~/.ssh/id_muppet_rsa
+    }
+}
+
+proc muppet::ssh_user_config_transform {config method host args} {
+    #| Transform an ssh config string
+    # method one of set | update | delete
     # {1,1}? required to specify non-greedy matching over the whole RE
     regexp -nocase "(?:(?:^|\\n)\\s*Host\\s+${host}\\s+.*(?:(?=\\n\\s*Host\\s)|$)){1,1}?" $config host_clause
-    if { [info exists host_clause] } {
-
-        set host_clause [string trim $host_clause]
-    }
     switch $method {
         set {
             # Clause is being set. Replace $host_clause if exists.
             # Build host dict - host must always be first
             set host_dict [dict create host $host {*}[qc::lower $args]]
-            set new_host_clause [muppet::ssh_user_config_host_dict2clause $host_dict]
+            set new_host_clause [muppet::ssh_user_config_clause $host_dict]
             if { [info exists host_clause] } {
-                set config [string map [subst -nobackslashes -nocommands {{$host_clause} {$new_host_clause}}] $config]
+                set config [string map [list $host_clause $new_host_clause] $config]
             } else {
                 append config "$new_host_clause\n\n"
             }
@@ -99,23 +100,23 @@ proc muppet::ssh_user_config_transform {config method host args} {
                 dict set host_dict $name $value
             }
             # get new host clause from updated dict
-            set new_host_clause [muppet::ssh_user_config_host_dict2clause $host_dict]
-            # Substitute old host_clause for new
-            set config [string map [subst -nobackslashes -nocommands {{$host_clause} {$new_host_clause}}] $config]
+            set new_host_clause [muppet::ssh_user_config_clause $host_dict]
+            # Replace old host_clause for new
+            set config [string map [list $host_clause ${new_host_clause}] $config]
         }
         delete {
             # Clause is being deleted. $host_clause will be removed.
-            set config [string map [subst -nocommands -nobackslashes {{$host_clause} {}}] $config]
+            set config [string map [list $host_clause ""] $config]
         }
         default {
             error "Unknown method. Must be one of set, update or delete."
         }
     }
-
     return $config
 }
 
-proc muppet::ssh_user_config_host_dict2clause { host_dict} {
+proc muppet::ssh_user_config_clause {host_dict} {
+    # Format args as an ssh config Host clause
     set lines {}
     dict for {key value} $host_dict {
         lappend lines "$key $value"
@@ -123,33 +124,37 @@ proc muppet::ssh_user_config_host_dict2clause { host_dict} {
     return [join $lines \n]
 }
 
-proc muppet::ssh_private_repo { repo repo_host } {
-    #| Set up access to a ssh private repo for the root user.
-    #
-    # eg. ssh_repo_access private my_repo.domain.co.uk
-    # Will look for an encrypted private key at a remote location and save it as /root/.ssh/id_private_rsa
-    # The encrypted key will be decypted on disk requiring the encryption key to be entered by the user.
-    # An ssh config will be added as follows to use the saved private key to access this repo:
-    #
-    # Host private_repo
-    # HostName my_repo.domain.co.uk
-    # User private
-    # IdentityFile ~/.ssh/id_private_rsa
-    #
-    # and a sources.list entry will be added for a repo in /home/private using the "private" user to alias private_repo.
-    # This proc assumes the associated public key is already installed on the repo_host for the correct user.
-
-    puts "Key remote location:"
+proc muppet::ssh_private_repo { name user host } {
+    #| Set up access to an ssh private repository for the root user.
+    puts "Private Key remote location:"
     set key_location [gets_with_timeout 100000 ""]
-    set key [http_get http://${key_location}/id_${repo}_rsa]
-    puts "..found id_${repo}_rsa"
-    ssh_user_private_key root $key "id_${repo}_rsa"
-    
-    muppet::ssh_user_config set root ${repo}_repo HostName $repo_host User $repo IdentityFile ~/.ssh/id_${repo}_rsa
+    set private_key [http_get $key_location]
+    set filename [file tail $key_location]
+    ssh_user_private_key root $private_key $filename
+    muppet::ssh_user_config set root $name HostName $host User $user IdentityFile ~/.ssh/$filename
     
     # Add to sources.list
-    set repo_source "deb ssh://${repo}_repo:/home/${repo}/ squeeze main"
+    set repo_source "deb ssh://${name}:/home/${user}/ squeeze main"
     if { ![file_contains_line /etc/apt/sources.list $repo_source] } {
         file_append /etc/apt/sources.list $repo_source
+    }
+}
+
+doc muppet::ssh_private_repo {
+    Examples {
+        % muppet ssh_repo_access private john debian.domain.co.uk
+        Will look for an encrypted private key at a remote location and save it to /root/.ssh/
+        The encrypted key will be decypted on disk requiring the encryption key to be entered by the user.
+        An ssh config will be added as follows to use the saved private key to access this repo:
+        
+        Host private
+        HostName debian.domain.co.uk
+        User john
+        IdentityFile ~/.ssh/john.key
+        
+        and a sources.list entry will be added
+        deb ssh://private:/home/john/ squeeze main
+
+        Assume that this key has already been authorized access to john@debian.domain.co.uk
     }
 }
