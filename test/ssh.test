@@ -42,9 +42,8 @@ namespace eval ::muppet::test {
     } -result {host muppet_repo
 hostname debian.qcode.co.uk
 user muppet
-identityfile ~/.ssh/id_muppet_rsa
+identityfile ~/.ssh/id_muppet_rsa}
 
-}
     test ssh_user_config_transform-1.1 {
         ssh_user_config_transform set new clasue in existing config
     } -setup {
@@ -64,9 +63,7 @@ identityfile ~/.ssh/id_muppet_rsa
 host another_repo
 hostname another.qcode.co.uk
 user another
-identityfile ~/.ssh/id_another_rsa
-
-}
+identityfile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.2 {
         ssh_user_config_transform update existing config
@@ -92,9 +89,7 @@ identityfile ~/.ssh/id_updated_rsa
 host another_repo
 hostname another.qcode.co.uk
 user another
-identityfile ~/.ssh/id_another_rsa
-
-}
+identityfile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.3 {
         ssh_user_config_transform set existing clause in existing config
@@ -118,9 +113,7 @@ user muppet
 identityfile ~/.ssh/id_muppet_rsa
 
 host another_repo
-hostname updated.qcode.co.uk
-
-}
+hostname updated.qcode.co.uk}
 
     test ssh_user_config_transform-1.4 {
         ssh_user_config_transform delete last clause
@@ -141,11 +134,7 @@ identityfile ~/.ssh/id_another_rsa
     } -result {host muppet_repo
 hostname debian.qcode.co.uk
 user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-
-
-}
+identityfile ~/.ssh/id_muppet_rsa}
 
     test ssh_user_config_transform-1.5 {
         ssh_user_config_transform delete first clause
@@ -163,14 +152,10 @@ identityfile ~/.ssh/id_another_rsa
 }
     } -body {
         muppet::ssh_user_config_transform $config delete muppet_repo
-    } -result {
-
-host another_repo
+    } -result {host another_repo
 hostname another.qcode.co.uk
 user another
-identityfile ~/.ssh/id_another_rsa
-
-}
+identityfile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.6 {
         ssh_user_config_transform delete only clause
@@ -183,9 +168,7 @@ identityfile ~/.ssh/id_muppet_rsa
 }
     } -body {
         muppet::ssh_user_config_transform $config delete muppet_repo
-    } -result {
-
-}
+    } -result {}
 
 
     cleanupTests
