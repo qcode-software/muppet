@@ -33,137 +33,132 @@ namespace eval ::muppet::test {
         1
     } -result {User not found}
 
+    # user_config_transform
     test ssh_user_config_transform-1.0 {
         ssh_user_config_transform set empty config
     } -setup {
         set config ""
     } -body {
         muppet::ssh_user_config_transform $config set muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa 
-    } -result {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa}
+    } -result {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa}
 
     test ssh_user_config_transform-1.1 {
         ssh_user_config_transform set new clasue in existing config
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
 
 }
     } -body {
         muppet::ssh_user_config_transform $config set another_repo HostName another.qcode.co.uk User another IdentityFile ~/.ssh/id_another_rsa 
-    } -result {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa}
+    } -result {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.2 {
         ssh_user_config_transform update existing config
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
 
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa
 
 }
     } -body {
         muppet::ssh_user_config_transform $config update muppet_repo User updated_user IdentityFile ~/.ssh/id_updated_rsa 
-    } -result {host muppet_repo
-hostname debian.qcode.co.uk
-user updated_user
-identityfile ~/.ssh/id_updated_rsa
-
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa}
+    } -result {Host muppet_repo
+HostName debian.qcode.co.uk
+User updated_user
+IdentityFile ~/.ssh/id_updated_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.3 {
         ssh_user_config_transform set existing clause in existing config
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa
 
 }
     } -body {
-        muppet::ssh_user_config_transform $config set another_repo hostname updated.qcode.co.uk
-    } -result {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-host another_repo
-hostname updated.qcode.co.uk}
+        muppet::ssh_user_config_transform $config set another_repo HostName updated.qcode.co.uk
+    } -result {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
+Host another_repo
+HostName updated.qcode.co.uk}
 
     test ssh_user_config_transform-1.4 {
         ssh_user_config_transform delete last clause
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa
 
 }
     } -body {
         muppet::ssh_user_config_transform $config delete another_repo
-    } -result {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa}
+    } -result {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa}
 
     test ssh_user_config_transform-1.5 {
         ssh_user_config_transform delete first clause
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
-
-host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa
 
 }
     } -body {
         muppet::ssh_user_config_transform $config delete muppet_repo
-    } -result {host another_repo
-hostname another.qcode.co.uk
-user another
-identityfile ~/.ssh/id_another_rsa}
+    } -result {Host another_repo
+HostName another.qcode.co.uk
+User another
+IdentityFile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.6 {
         ssh_user_config_transform delete only clause
     } -setup {
-        set config {host muppet_repo
-hostname debian.qcode.co.uk
-user muppet
-identityfile ~/.ssh/id_muppet_rsa
+        set config {Host muppet_repo
+HostName debian.qcode.co.uk
+User muppet
+IdentityFile ~/.ssh/id_muppet_rsa
 
 }
     } -body {

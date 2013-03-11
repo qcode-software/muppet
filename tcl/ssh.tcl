@@ -1,5 +1,5 @@
 package provide muppet 1.0
-package require qcode 1.8
+package require qcode 1.17
 namespace eval muppet {}
 
 proc muppet::ssh_user_private_key { user private_key {filename "id_rsa"}} {
@@ -46,7 +46,7 @@ proc muppet::ssh_user_authorize_key {user public_key} {
 
 proc muppet::ssh_user_config {method user host args} {
     #| Create or modify a Host clause in the user's ssh_config ~/.ssh/config
-    # Each Host cluase must be uniquely named
+    # Each Host clause must be uniquely named
     set config_path "[muppet::user_home $user]/.ssh"
     set config_file "$config_path/config"
     if { ![file exists $config_path] } {
@@ -79,104 +79,78 @@ proc muppet::ssh_user_config_transform {config method host args} {
     #| Transform an ssh config string
     # method one of set | update | delete
 
-    # Parse config file
-    set host_ldict [muppet::ssh_user_config2ldict $config]
-    # get index of host_dict
-    set index [qc::ldict_search host_ldict "host" $host]
-    # Extract host_dict ({} if doesn't exist)
-    set host_dict [lindex $host_ldict $index]
-
+    # Parse config string into a dict with a key for global config options and a key for each host.
+    # Each dict value is a multimap of config name/value pairs
+    # Use #global to avoid collision with Host global
+    set dict {}
+    foreach line [split $config \n] {
+        lassign [ssh_config_parse_line $line] name value
+        if { ![info exists this_host] && [qc::lower $name] ne "host" } {
+            dict lappend dict "#global" $name $value
+        } else {
+            if { [qc::lower $name] eq "host" } {
+                # Starting a new host section
+                set this_host $value
+            } else {
+                dict lappend dict $this_host $name $value
+            }
+        }        
+    }
+    # Set or Update or Delete
     switch $method {
         set {
-            # Clause is being set. Replace $host_clause if exists.
-            set new_host_dict [dict create host $host {*}$args]
-            if { $index ne -1 } {
-                # host clause exists, replace
-                set host_ldict [lreplace $host_ldict $index $index $new_host_dict]
-            } else {
-                # New host clause
-                lappend host_ldict $new_host_dict
-            }
+            dict set dict $host $args
         }
         update {
-            # Clause is being updated. $host_clause will be changed and rewritten.
+            set multimap [dict get $dict $host]
+            # Clause is being updated.
             foreach {name value} $args {
-                dict set host_dict [qc::lower $name] $value
+                qc::multimap_set_first -nocase multimap $name $value
             }
-            set host_ldict [lreplace $host_ldict $index $index $host_dict]
+            dict set dict $host $multimap
         }
         delete {
-            # Clause is being deleted. $host_clause will be removed.
-            set host_ldict [lreplace $host_ldict $index $index]
+            # Clause is being deleted.
+            dict unset dict $host
         }
         default {
             error "Unknown method. Must be one of set, update or delete."
         }
     }
-    return [muppet::ssh_user_ldict2config $host_ldict]
-}
-
-proc muppet::ssh_user_ldict2config { host_ldict } {
-    #| Will format a list of dicts as a string containing host clauses.
-    set config {}
-    foreach host_dict $host_ldict {
-        set lines {}
-        dict for {key value} $host_dict {
-            lappend lines "[qc::lower $key] $value"
+    # Format for output
+    set lines {}
+    dict for {key multimap} $dict {
+        if {$key ne "#global"} { 
+            lappend lines "Host $key"
         }
-        lappend config [join $lines \n]
-    }
-    return [join $config \n\n]
-}
-
-proc muppet::ssh_user_config2ldict { config } {
-    #| Parse ssh_config file contents into a list of dicts.
-    # Will only work with straightforward "keyword value" pairs
-    # Valid config lines that will NOT work at the moment are:
-    #
-    # LocalForward locahost:1430  imap.pretendco.com:143 
-    # UserKnownHostsFile=/dev/null
-    # Port 9999 # this is a comment
-    # 
-    # Keyword case insensitive
-    # Value case sensitive
-
-    set host_ldict {}
-    set host_dict {}
-    
-    foreach {keyword value} $config {
-        switch [qc::lower $keyword] {
-            "host" {
-                if { $host_dict ne {} } {
-                    # We have an existing host clause to now finish
-                    lappend host_ldict $host_dict
-                }
-                # start of new host clause
-                set host_dict [dict create [qc::lower $keyword] $value]
-            }
-            default {
-                dict set host_dict [qc::lower $keyword] $value
+        foreach {name value} $multimap {
+            if { $name eq "#comment" } {
+                lappend lines "# $value"
+            } elseif { $name eq "#blankline" } {
+                #lappend lines ""
+                # Ignore blanklines
+            } else {
+                lappend lines "$name $value"
             }
         }
     }
-    if { $host_dict ne {} } {
-        # Reached end of config, last host clause is finshed
-        lappend host_ldict $host_dict
-    }
-    return $host_ldict
+    return [join $lines \n]
 }
 
-proc muppet::ssh_user_config2ldict2 { config } {
-    # Alternate implementation
-    set host_dict [dict create [qc::lower [qc::lshift config]] [qc::lshift config]]
-    while { [llength $config] && [qc::lower [lindex $config 0]] ne "host" } {
-        dict set host_dict [qc::lower [qc::lshift config]] [qc::lshift config]
+proc muppet::ssh_config_parse_line {line} {
+    # Parse one line of the config file into a name/value pairs 
+    # Comments use the key "comment".
+    set list {}
+    if {[regexp {^\s*#(.*)$} $line -> comment]} {
+        lappend list "#comment" $comment
+    } elseif { [regexp {^\s*$} $line -> comment] } {
+        lappend list "#blankline" ""
+    } elseif { [regexp {[^=]+=[^=]+} $line] } { 
+        lappend list {*}[qc::split_pair $line =]
+    } else {
+        lappend list {*}[qc::split_pair [string map [list \t " "] $line] " "]
     }
-    if { [llength $config] } {
-        return [list $host_dict {*}[muppet::ssh_user_config2ldict2 $config]]
-    } else {    
-        return [list $host_dict]
-    }
+    return $list
 }
 
 proc muppet::ssh_private_repo { name user host } {
