@@ -125,7 +125,7 @@ proc muppet::ssh_user_config_transform {config method host args} {
         }
         foreach {name value} $multimap {
             if { $name eq "#comment" } {
-                lappend lines "# $value"
+                lappend lines "#$value"
             } elseif { $name eq "#blankline" } {
                 #lappend lines ""
                 # Ignore blanklines

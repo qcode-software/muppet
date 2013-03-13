@@ -66,28 +66,30 @@ User another
 IdentityFile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.2 {
-        ssh_user_config_transform update existing config
+        ssh_user_config_transform update existing config with comments
     } -setup {
-        set config {Host muppet_repo
+        set config {# First line comment
+Host muppet_repo
 HostName debian.qcode.co.uk
-User muppet
+User muppet  # part line comment
 IdentityFile ~/.ssh/id_muppet_rsa
 
 Host another_repo
 HostName another.qcode.co.uk
-User another
+User another # part line comment
 IdentityFile ~/.ssh/id_another_rsa
 
 }
     } -body {
         muppet::ssh_user_config_transform $config update muppet_repo User updated_user IdentityFile ~/.ssh/id_updated_rsa 
-    } -result {Host muppet_repo
+    } -result {# First line comment
+Host muppet_repo
 HostName debian.qcode.co.uk
 User updated_user
 IdentityFile ~/.ssh/id_updated_rsa
 Host another_repo
 HostName another.qcode.co.uk
-User another
+User another # part line comment
 IdentityFile ~/.ssh/id_another_rsa}
 
     test ssh_user_config_transform-1.3 {
@@ -165,6 +167,32 @@ IdentityFile ~/.ssh/id_muppet_rsa
         muppet::ssh_user_config_transform $config delete muppet_repo
     } -result {}
 
+    test ssh_user_config_transform-1.7 {
+        ssh_user_config_transform update existing config with comments using =
+    } -setup {
+        set config {# First line comment
+Host muppet_repo
+HostName=debian.qcode.co.uk
+User = muppet  # part line comment
+IdentityFile=~/.ssh/id_muppet_rsa
+
+Host = another_repo
+HostName = another.qcode.co.uk
+User = another # part line comment
+IdentityFile = ~/.ssh/id_another_rsa
+
+}
+    } -body {
+        muppet::ssh_user_config_transform $config update muppet_repo User updated_user IdentityFile ~/.ssh/id_updated_rsa 
+    } -result {# First line comment
+Host muppet_repo
+HostName debian.qcode.co.uk
+User updated_user
+IdentityFile ~/.ssh/id_updated_rsa
+Host another_repo
+HostName another.qcode.co.uk
+User another # part line comment
+IdentityFile ~/.ssh/id_another_rsa}
 
     cleanupTests
 }
