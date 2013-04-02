@@ -12,7 +12,7 @@ REMOTEDIR=debian.qcode.co.uk
 
 all: test package upload clean incr-release
 package:
-	checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-1.8,iproute" make install
+	checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-1.17,iproute" make install
 
 test:
 	./pkg_mkIndex $(PACKAGEDIR)
