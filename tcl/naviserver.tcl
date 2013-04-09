@@ -6,11 +6,6 @@ namespace eval muppet {
 
 proc muppet::naviserver_install {} {
     install naviserver-core naviserver-nsdbpg naviserver
-    user_add nsd
-    file mkdir /var/log/naviserver/
-    file attributes /var/log/naviserver/ -owner nsd -group nsd -permissions 0770
-    file mkdir /var/run/naviserver/
-    file attributes /var/run/naviserver/ -owner nsd -group nsd -permissions 0770
 }
 
 proc muppet::naviserver_daemontools_run { service } {
@@ -29,8 +24,8 @@ exec \$NSD_EXE -u nsd -g nsd -i -t /home/nsd/${service}/etc/${service}.tcl 2>&1
 }
 
 proc muppet::naviserver_service {service} {
-    file mkdir /var/log/naviserver/log/$service
     file mkdir /etc/nsd/$service
     file_write /etc/nsd/$service/run [naviserver_daemontools_run $service] 0700
+    file delete /etc/service/$service
     file_link /etc/service/$service /etc/nsd/$service
 }
