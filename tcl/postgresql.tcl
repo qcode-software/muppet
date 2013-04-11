@@ -128,7 +128,7 @@ proc muppet::postgresql_tuning {args} {
     # USAGE: postgresql_tuning -version 9.1 max_connections 100 shared_buffers 24MB maintenance_work_memory 16MB work_mem 1MB
     args $args -version 8.4 -- args
     set filename /etc/postgresql/${version}/main/postgresql.conf    
-    set postgresql_conf [file_config_update $filename {*}$args]
+    set postgresql_conf [config_update $filename {*}$args]
     file_write $filename $postgresql_conf 0644
     service postgresql restart
 }

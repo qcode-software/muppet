@@ -123,7 +123,7 @@ proc muppet::config_update {filename args} {
     # Configs layout should be similar to:
     # param1 = value1
     # #param2 = value2
-    # Usage: file_config_update /etc/postgresql/8.4/main/postgresql.conf shared_buffers 24MB listen_addresses "'127.0.0.1, 192.168.0.2'" 
+    # Usage: config_update /etc/postgresql/8.4/main/postgresql.conf shared_buffers 24MB listen_addresses "'127.0.0.1, 192.168.0.2'" 
     set config [cat $filename]    
     set append_lines {}
    
