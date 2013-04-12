@@ -83,6 +83,21 @@ proc muppet::ec2_tools_install {} {
 
 }
 
+proc muppet::ec2_delete_snapshots_older_than { days } {
+    #| Delete all snapshots for this instance which are older than $days days
+    # List all volumes for this instance (often only 1)
+    set volumes [exec ec2-describe-volumes --filter attachment.instance-id=[qc::my instance_id]]
+    foreach {match volume_id filesystem} [regexp -linestop -lineanchor -all -inline "^ATTACHMENT\\s+(\\S+)\\s+\\S+\\s+(\\S+)\\s+.+\$" $volumes] { 
+        # For volumes associated with this instance, iterate through all corresponding complete snapshots
+        set snapshots [exec ec2-describe-snapshots --filter volume-id=$volume_id]
+        foreach {match snapshot_id timestamp} [regexp -linestop -lineanchor -all -inline "^SNAPSHOT\\s+(\\S+)\\s+$volume_id\\s+completed\\s+(\\S+)\\s+100%.+\$" $snapshots] { 
+            if {[qc::date_days [qc::cast_date $timestamp] [qc::cast_date now]] > $days } {
+                ec2-delete-snapshop $snapshot_id
+            }
+        }
+    }
+}
+
 proc muppet::ec2_snapshot_self {} {
     #| Creates snapshots of all volumes attached to the local EC2 instance
     # TODO uses sync rather than xfs_freeze for now
