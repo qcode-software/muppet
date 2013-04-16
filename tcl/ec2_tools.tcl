@@ -92,7 +92,7 @@ proc muppet::ec2_delete_snapshots_older_than { days } {
         set snapshots [exec ec2-describe-snapshots --filter volume-id=$volume_id]
         foreach {match snapshot_id timestamp} [regexp -linestop -lineanchor -all -inline "^SNAPSHOT\\s+(\\S+)\\s+$volume_id\\s+completed\\s+(\\S+)\\s+100%.+\$" $snapshots] { 
             if {[qc::date_days [qc::cast_date $timestamp] [qc::cast_date now]] > $days } {
-                ec2-delete-snapshop $snapshot_id
+                exec ec2-delete-snapshop $snapshot_id
             }
         }
     }
