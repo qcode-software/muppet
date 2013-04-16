@@ -104,9 +104,9 @@ proc muppet::ec2_snapshot_self {} {
     set volumes [exec ec2-describe-volumes]
     set instance_id [qc::my instance_id]
     foreach {match volume_id filesystem} [regexp -linestop -lineanchor -all -inline "^ATTACHMENT\\s+(\\S+)\\s+$instance_id\\s+(\\S+)\\s+.+\$" $volumes] { 
-        sh sync
-        sh sync
-        sh ec2-create-snapshot $volume_id -d "[qc::my hostname] $filesystem on $volume_id"
+        exec sync
+        exec sync
+        exec ec2-create-snapshot $volume_id -d "[qc::my hostname] $filesystem on $volume_id"
     }
 }
 
