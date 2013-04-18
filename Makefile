@@ -25,7 +25,7 @@ install:
 	cp $(PACKAGEDIR)/*.tcl /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp LICENSE /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp bin/muppet /usr/local/bin/muppet
-	cp muppet.tcl.conf /etc/muppet.tcl
+	cp muppet.tcl.conf /etc/muppet.tcl.sample
 
 upload:
 	scp $(NAME)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER)@$(REMOTEHOST):$(REMOTEDIR)/debs"	
