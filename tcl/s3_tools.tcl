@@ -15,7 +15,7 @@ proc muppet::s3_url {bucket} {
     }
 }
 
-proc muppet::s3_headers { verb path bucket } {
+proc muppet::s3_headers { verb path bucket {content_type ""} } {
     set access_key [dict get [qc::param aws] access_key]
     #set access_key "AKIAIOSFODNN7EXAMPLE"
     set secret_access_key [dict get [qc::param aws] secret_access_key]
@@ -26,12 +26,7 @@ proc muppet::s3_headers { verb path bucket } {
    
     #TODO ignoring sub-resources for now
     if { $bucket ne "" } {
-        #TODO url_path of / returns "" so need to change or make an exception
-        if { $path eq "/" } {
-            set canonicalized_resource "/$bucket/"
-        } else {
-            set canonicalized_resource "/$bucket[qc::url_path $path]"
-        }
+        set canonicalized_resource "/$bucket[qc::url_path $path]"
     } else {
         set canonicalized_resource "/"
     }
@@ -41,10 +36,14 @@ proc muppet::s3_headers { verb path bucket } {
     set canonicalized_amz_headers  ""
 
     set string_to_sign "$verb"
-    # Content md5
+    # Content md5 (only if header is used in request)
     lappend string_to_sign ""  
-    # Content type
-    lappend string_to_sign ""  
+    # Content type (only if header is used in request)
+    if { $content_type ne "" } {
+        lappend string_to_sign "$content_type"  
+    } else {
+        lappend string_to_sign ""  
+    }
     lappend string_to_sign $date
     lappend string_to_sign "${canonicalized_amz_headers}${canonicalized_resource}"
     set string_to_sign [join $string_to_sign \n]
@@ -60,9 +59,33 @@ proc muppet::s3_headers { verb path bucket } {
     return [list Host [s3_url $bucket] Date $date Authorization $authorization]
 }
 
-proc muppet::s3_get { path {bucket ""} } {
+proc muppet::s3_get { args  } {
+    qc::args $args -query "" -- bucket path 
+    puts "path - $path bucket = $bucket"
     set headers [s3_headers GET $path $bucket] 
-    return [qc::http_get -headers $headers [s3_url $bucket]]
+    puts "url = [s3_url $bucket]${path}$query"
+    return [qc::http_get -headers $headers [s3_url $bucket]${path}$query]
+}
+
+proc muppet::s3_save { args  } {
+    qc::args $args -query "" -- bucket path filename
+    puts "path - $path bucket = $bucket"
+    set headers [s3_headers GET $path $bucket] 
+    puts "url = [s3_url $bucket]${path}$query"
+    return [qc::http_save -headers $headers [s3_url $bucket]${path}$query $filename]
+}
+
+proc muppet::s3_put { args  } {
+    qc::args $args -query "" -- bucket filename path
+    puts "path - $path bucket = $bucket"
+    set content_type [qc::mime_type_guess $filename]
+    set headers [s3_headers PUT $path $bucket $content_type] 
+    lappend headers Content-Length [file size $filename]
+    lappend headers Content-Type $content_type
+    lappend headers Transfer-Encoding {}
+    puts "headers = $headers"
+    puts "url = [s3_url $bucket]${path}$query"
+    return [qc::http_put -headers $headers [s3_url $bucket]${path}$query $filename]
 }
 
 proc string2hex s {
@@ -73,37 +96,46 @@ proc string2hex s {
 proc muppet::s3 { args } {
     switch [lindex $args 0] {
         ls {
-	    set xmlDoc [s3_get /]
-            set doc [dom parse $xmlDoc]
-            set root [$doc documentElement]
-            $doc selectNodesNamespaces "ns [$root getAttribute xmlns]"
-            set buckets {}
-            foreach bucket [$root selectNodes {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket}] {
-                lappend buckets [[$bucket getElementsByTagName Name] asText]
-            }
-            $doc delete
-            return $buckets
+            # s3 ls
+	    return [muppet::s3_xml_select_tag {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket} "Name" [s3_get "" /]]
         }
         lsbucket {
-            # s3 lsbucket /bucket/path
-            regexp -line {^/([^/]+)(/\S*)$} [lindex $args 1] -> bucket path
-            set xmlDoc [s3_get $path $bucket]
-            set doc [dom parse $xmlDoc]
-            set root [$doc documentElement]
-            $doc selectNodesNamespaces "ns [$root getAttribute xmlns]"
-            set files {}
-            foreach file [$root selectNodes {/ns:ListBucketResult/ns:Contents}] {
-                lappend files [[$file getElementsByTagName Key] asText]
+            # s3 lsbucket bucket {prefix}
+            # s3 lsbucket myBucket /Photos
+            if { [llength $args] == 3 } {
+                # prefix is specified
+                set xmlDoc [s3_get -query "?prefix=[lindex $args 2]" / [lindex $args 1]]
+            } else {
+                set xmlDoc [s3_get / [lindex $args 1]]
             }
-            $doc delete
-            return $files
+	    return [muppet::s3_xml_select_tag  {/ns:ListBucketResult/ns:Contents} "Key" $xmlDoc ]
         }
         get {
-            # usage: s3 get /bucket/object
-            # eg.: s3 get /myBucket/images/armadillo.jpg 
+            # usage: s3 get bucket remote_path local_path
+            puts "args = $args"
+            s3_save {*}[lrange $args 1 end]
+        }
+        put {
+            # usage: s3 put bucket local_path remote_path
+            s3_put {*}[lrange $args 1 end]
         }
         default {
             error "Unknown s3 command"
         }
     }
+}
+
+proc muppet::s3_xml_select_tag { node_xpath tag_to_select xmlDoc } {
+    #| Overly simplistic proc to return a list of values from a xmlDoc
+    # Could be extended to return more complex data structures like ldict or multimaps
+    # containing several tags
+    set doc [dom parse $xmlDoc]
+    set root [$doc documentElement]
+    $doc selectNodesNamespaces "ns [$root getAttribute xmlns]"
+    set result {}
+    foreach node [$root selectNodes $node_xpath] {
+        lappend result [[$node getElementsByTagName $tag_to_select] asText]
+    }
+    $doc delete
+    return $result
 }
