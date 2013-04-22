@@ -1,6 +1,8 @@
 package provide muppet 1.0
 package require qcode 1.17
 package require sha1
+package require md5
+package require base64
 package require tdom
 namespace eval muppet {
     namespace export *
@@ -15,16 +17,19 @@ proc muppet::s3_url {bucket} {
     }
 }
 
-proc muppet::s3_headers { verb path bucket {content_type ""} } {
+proc muppet::s3_auth_headers { args } {
+    #| Constructs the required s3 authentication header for the request type in question.
+    #| See: http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html
+ 
+    qc::args $args -content_type "" -content_md5 "" -- verb path bucket 
+    # eg s3_auth_headers -content_type image/jpeg -content_md5 xxxxxx PUT /pics/image.jpg mybucket
+
+    # AWS credentials
     set access_key [dict get [qc::param aws] access_key]
-    #set access_key "AKIAIOSFODNN7EXAMPLE"
     set secret_access_key [dict get [qc::param aws] secret_access_key]
-    #set secret_access_key "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
-    #set secret_access_key fakeaccesskey
+
     set date [qc::format_timestamp_http now]
-    #set date "Tue, 27 Mar 2007 21:15:45 +0000"
    
-    #TODO ignoring sub-resources for now
     if { $bucket ne "" } {
         set canonicalized_resource "/$bucket[qc::url_path $path]"
     } else {
@@ -35,18 +40,14 @@ proc muppet::s3_headers { verb path bucket {content_type ""} } {
     # TODO ignoring canonicalized_amz_headers
     set canonicalized_amz_headers  ""
 
+    # Contruct string for hmac signing
     set string_to_sign "$verb"
-    # Content md5 (only if header is used in request)
-    lappend string_to_sign ""  
-    # Content type (only if header is used in request)
-    if { $content_type ne "" } {
-        lappend string_to_sign "$content_type"  
-    } else {
-        lappend string_to_sign ""  
-    }
-    lappend string_to_sign $date
+    lappend string_to_sign "$content_md5"  
+    lappend string_to_sign "$content_type"  
+    lappend string_to_sign "$date"
     lappend string_to_sign "${canonicalized_amz_headers}${canonicalized_resource}"
     set string_to_sign [join $string_to_sign \n]
+        
     puts "sts = *${string_to_sign}*"
     puts "[string2hex ${string_to_sign}]"
 
@@ -59,33 +60,38 @@ proc muppet::s3_headers { verb path bucket {content_type ""} } {
     return [list Host [s3_url $bucket] Date $date Authorization $authorization]
 }
 
-proc muppet::s3_get { args  } {
-    qc::args $args -query "" -- bucket path 
+proc muppet::s3_get { bucket path } {
+    #| Construct the http GET request to S3 including auth headers
     puts "path - $path bucket = $bucket"
-    set headers [s3_headers GET $path $bucket] 
-    puts "url = [s3_url $bucket]${path}$query"
-    return [qc::http_get -headers $headers [s3_url $bucket]${path}$query]
+    set headers [s3_auth_headers GET $path $bucket] 
+    puts "url = [s3_url $bucket]$path"
+    return [qc::http_get -headers $headers [s3_url $bucket]$path]
 }
 
-proc muppet::s3_save { args  } {
-    qc::args $args -query "" -- bucket path filename
+proc muppet::s3_save { bucket path filename } {
+    #| Construct the http SAVE request to S3 including auth headers
     puts "path - $path bucket = $bucket"
-    set headers [s3_headers GET $path $bucket] 
-    puts "url = [s3_url $bucket]${path}$query"
-    return [qc::http_save -headers $headers [s3_url $bucket]${path}$query $filename]
+    set headers [s3_auth_headers GET $path $bucket] 
+    puts "url = [s3_url $bucket]$path"
+    return [qc::http_save -headers $headers [s3_url $bucket]$path $filename]
 }
 
-proc muppet::s3_put { args  } {
-    qc::args $args -query "" -- bucket filename path
+proc muppet::s3_put { bucket filename path } {
+    #| Construct the http PUT request to S3 including auth headers
     puts "path - $path bucket = $bucket"
     set content_type [qc::mime_type_guess $filename]
-    set headers [s3_headers PUT $path $bucket $content_type] 
+    # content_md5 header allows AWS to return an error if the file received has a different md5
+    set content_md5 [::base64::encode [::md5::md5 -file $filename]]
+    # Authentication value needs to use content_* values for hmac signing
+    set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
     lappend headers Content-Length [file size $filename]
+    lappend headers Content-MD5 $content_md5
     lappend headers Content-Type $content_type
+    # Stop tclcurl from stending Transfer-Encoding header
     lappend headers Transfer-Encoding {}
     puts "headers = $headers"
-    puts "url = [s3_url $bucket]${path}$query"
-    return [qc::http_put -headers $headers [s3_url $bucket]${path}$query $filename]
+    puts "url = [s3_url $bucket]$path"
+    return [qc::http_put -headers $headers [s3_url $bucket]$path $filename]
 }
 
 proc string2hex s {
@@ -94,25 +100,27 @@ proc string2hex s {
  }
 
 proc muppet::s3 { args } {
+    #| Access Amazon S3 buckets via REST API
+    # Usage: s3 subcommand {args}
+    # where subcommand is one of ls, lsbucket, put
     switch [lindex $args 0] {
         ls {
-            # s3 ls
-	    return [muppet::s3_xml_select_tag {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket} "Name" [s3_get "" /]]
+            # usage: s3 ls
+	    return [muppet::xml_nodes2text [muppet::s3_xml_nodes_select [s3_get "" /] {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket/ns:Name/text()} ]]
         }
         lsbucket {
-            # s3 lsbucket bucket {prefix}
-            # s3 lsbucket myBucket /Photos
+            # usage: s3 lsbucket bucket {prefix}
+            # s3 lsbucket myBucket Photos/
             if { [llength $args] == 3 } {
                 # prefix is specified
-                set xmlDoc [s3_get -query "?prefix=[lindex $args 2]" / [lindex $args 1]]
+                set xmlDoc [s3_get [lindex $args 1] "/?prefix=[lindex $args 2]"]
             } else {
-                set xmlDoc [s3_get / [lindex $args 1]]
+                set xmlDoc [s3_get [lindex $args 1] /]
             }
-	    return [muppet::s3_xml_select_tag  {/ns:ListBucketResult/ns:Contents} "Key" $xmlDoc ]
+	    return [muppet::xml_nodes2text [muppet::s3_xml_nodes_select $xmlDoc {/ns:ListBucketResult/ns:Contents/ns:Key} ]]
         }
         get {
             # usage: s3 get bucket remote_path local_path
-            puts "args = $args"
             s3_save {*}[lrange $args 1 end]
         }
         put {
@@ -120,22 +128,25 @@ proc muppet::s3 { args } {
             s3_put {*}[lrange $args 1 end]
         }
         default {
-            error "Unknown s3 command"
+            error "Unknown s3 command. Must be one of ls, lsbucket or put."
         }
     }
 }
 
-proc muppet::s3_xml_select_tag { node_xpath tag_to_select xmlDoc } {
+proc muppet::s3_xml_nodes_select { xmlDoc xpath } {
     #| Overly simplistic proc to return a list of values from a xmlDoc
     # Could be extended to return more complex data structures like ldict or multimaps
     # containing several tags
     set doc [dom parse $xmlDoc]
     set root [$doc documentElement]
     $doc selectNodesNamespaces "ns [$root getAttribute xmlns]"
+    return [$root selectNodes $xpath] 
+}
+
+proc muppet::xml_nodes2text { list } {
     set result {}
-    foreach node [$root selectNodes $node_xpath] {
-        lappend result [[$node getElementsByTagName $tag_to_select] asText]
+    foreach node $list {
+        lappend result [$node asText]
     }
-    $doc delete
     return $result
 }
