@@ -4,7 +4,7 @@ namespace eval muppet {
     namespace export *
 }
 
-proc ntp_generic_client_conf {} {
+proc muppet::ntp_generic_client_conf {} {
     #| Generic NTP config which should be viable within a VM (tinker panic 0)
     return {tinker panic 0
 driftfile /var/lib/ntp/ntp.drift
@@ -36,13 +36,13 @@ restrict ::1
     }
 }
 
-proc ntp_generic_client_install {} {
+proc muppet::ntp_generic_client_install {} {
     # Install and start NTP client
     
     install ntp
 
     # Write config files
-    file_write "/etc/ntp.conf" [ntp_generic_client_conf] 0644
+    file_write "/etc/ntp.conf" [muppet::ntp_generic_client_conf] 0644
 
     # Restart daemon
     service ntp restart

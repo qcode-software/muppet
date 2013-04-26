@@ -4,7 +4,7 @@ namespace eval muppet {
     namespace export *
 }
 
-proc hostname_update { hostname domain } {
+proc muppet::hostname_update { hostname domain } {
     #| update /etc/hosts and /etc/hostname so that hostname and hostname -f return the
     # correct values (required for [my fqdn] etc.)
 
