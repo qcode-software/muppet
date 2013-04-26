@@ -50,7 +50,7 @@ proc muppet::user_groups { user args } {
 
 proc muppet::user_home { user } { 
     #| Return home directory of user
-    if { [regexp -line "^${user}:\\S*:\\d+:\\d+:\\S*:(\\S+):\\S+\$" [muppet::cat /etc/passwd] -> home_dir] } {
+    if { [regexp -line "^${user}:\\S*:\\d+:\\d+:[^:]*:(\\S+):\\S+\$" [muppet::cat /etc/passwd] -> home_dir] } {
         return $home_dir
     } else {
         error "User not found"
