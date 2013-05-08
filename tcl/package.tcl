@@ -63,7 +63,7 @@ proc muppet::locale_set { locale charset } {
     lappend locale_gen {}
     lappend locale_gen {}
 
-    set supported_locales [muppet::cat "/usr/share/i18n/SUPPORTED"] 
+    set supported_locales [muppet::cat "/usr/share/i18n/SUPPORTED"]
 
     foreach supported_locale [split $supported_locales \n] {
         if { "$locale $charset" eq $supported_locale } {

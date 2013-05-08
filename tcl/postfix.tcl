@@ -4,7 +4,7 @@ namespace eval muppet {
     namespace export *
 }
 
-proc postfix_local_only_install {} {
+proc muppet::postfix_local_only_install {} {
     #| Install postfix using the Local Only option
     package_option postfix postfix/root_address string ""
     package_option postfix postfix/rfc1035_violation boolean false
