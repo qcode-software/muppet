@@ -65,7 +65,9 @@ proc muppet::s3_get { bucket path } {
     puts "path - $path bucket = $bucket"
     set headers [s3_auth_headers GET $path $bucket] 
     puts "url = [s3_url $bucket]$path"
-    return [qc::http_get -headers $headers [s3_url $bucket]$path]
+    set result [qc::http_get -headers $headers [s3_url $bucket]$path]
+    puts $result
+    return $result
 }
 
 proc muppet::s3_save { bucket path filename } {
@@ -133,7 +135,7 @@ proc muppet::s3 { args } {
     }
 }
 
-proc muppet::s3_xml_nodes_select { xmlDoc xpath } {
+proc muppet::s3_xml_select { xmlDoc xpath } {
     #| Overly simplistic proc to return a list of values from a xmlDoc
     # Could be extended to return more complex data structures like ldict or multimaps
     # containing several tags
@@ -141,6 +143,18 @@ proc muppet::s3_xml_nodes_select { xmlDoc xpath } {
     set root [$doc documentElement]
     $doc selectNodesNamespaces "ns [$root getAttribute xmlns]"
     return [$root selectNodes $xpath] 
+}
+
+proc muppet::s3_xml_nodes2ldict { node_list } {
+    set ldict [list]
+    foreach node $node_list {
+        set dict {}
+        foreach child [$node childNodes] {
+            dict set dict [$child nodeName] [$child asText]
+        }
+        lappend ldict $dict
+    }
+    return $ldict
 }
 
 proc muppet::xml_nodes2text { list } {
