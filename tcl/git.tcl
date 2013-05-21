@@ -11,11 +11,12 @@ proc muppet::git_rev_parse {git_project_url revision} {
     set temp_dir /tmp/git_rev_parse
     sh rm -rf $temp_dir
     sh sudo -u nsd -s git clone $git_project_url $temp_dir
-    set commit [regexp -inline {^[a-z0-9]+\n$} [sh sudo -u nsd -s git --git-dir=${temp_dir}/.git --work-tree=${temp_dir} rev-parse $revision]]
+    regexp {^([a-z0-9]+)\n$} [sh sudo -u nsd -s git --git-dir=${temp_dir}/.git --work-tree=${temp_dir} rev-parse $revision] -> commit
     sh rm -rf $temp_dir
     if { $commit eq "" } {
 	error "Could not find commit using \"$revision\""
     }
+    return $commit
 }
 
 proc muppet::git_nsd_update {git_project_url revision} {
