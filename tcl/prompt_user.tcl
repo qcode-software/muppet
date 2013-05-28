@@ -5,9 +5,18 @@ namespace eval muppet {
 } 
 
 proc muppet::prompt_user {message} {
-    #| Prompt for user input
+    #| Prompt user for input
     puts $message
     return [gets stdin]
+}
+
+proc muppet::prompt_user_password {message {global_variable ""}} {
+    #| Prompt user for password (do not echo password to stdout)
+    puts $message
+    exec stty -echo
+    set password [gets stdin]
+    exec stty echo
+    return $password
 }
 
 proc muppet::prompt_user_bool {message} {
@@ -19,16 +28,3 @@ proc muppet::prompt_user_bool {message} {
     }
     return [cast_bool $input true false]
 }
-
-proc muppet::prompt_user_encrypt {message plaintext} {
-    #| Prompt User for key to encrypt ciphertext
-    set key [prompt_user $message]
-    return [encrypt_bf_tcl $key $plaintext]
-}
-
-proc muppet::prompt_user_decrypt {message ciphertext} {
-    #| Prompt User for key to decrypt ciphertext
-    set key [prompt_user $message]
-    return [decrypt_bf_tcl $key $ciphertext]
-}
-
