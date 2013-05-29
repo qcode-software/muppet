@@ -4,27 +4,27 @@ namespace eval muppet {
     namespace export *
 } 
 
-proc muppet::prompt_user {message} {
+proc muppet::prompt_user {args} {
     #| Prompt user for input
-    puts $message
-    return [gets stdin]
-}
-
-proc muppet::prompt_user_password {message {global_variable ""}} {
-    #| Prompt user for password (do not echo password to stdout)
-    puts $message
-    exec stty -echo
-    set password [gets stdin]
-    exec stty echo
-    return $password
-}
-
-proc muppet::prompt_user_bool {message} {
-    #| Prompt for boolean input from user
-    append message " (yes/no)"
-    set input [prompt_user $message]
-    while { ![true $input] && ![false $input] } {
-	set input [prompt_user $message]
+    args $args -password -passwd -boolean -bool -- message
+    
+    if { [info exists password] || [info exists passwd]} {
+        # Prompt user for password (do not echo password to stdout)
+        exec stty -echo
+        set input [prompt_user $message]
+        exec stty echo
+    } elseif { [info exists boolean] || [info exists bool] } {
+        #| Prompt for boolean input from user
+        append message " (yes/no)"
+        set input [prompt_user $message]
+        while { ![true $input] && ![false $input] } {
+            set input [prompt_user $message]
+        }
+        set input [cast_bool $input true false]
+    } else {
+        # Default: Prompt user for input
+        puts $message
+        gets stdin input
     }
-    return [cast_bool $input true false]
+    return $input    
 }
