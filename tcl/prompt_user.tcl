@@ -6,14 +6,14 @@ namespace eval muppet {
 
 proc muppet::prompt_user {args} {
     #| Prompt user for input
-    args $args -password -passwd -boolean -bool -- message
+    args $args -password -boolean -- message
     
-    if { [info exists password] || [info exists passwd]} {
+    if { [info exists password] } {
         # Prompt user for password (do not echo password to stdout)
         exec stty -echo
         set input [prompt_user $message]
         exec stty echo
-    } elseif { [info exists boolean] || [info exists bool] } {
+    } elseif { [info exists boolean] } {
         #| Prompt for boolean input from user
         append message " (yes/no)"
         set input [prompt_user $message]
