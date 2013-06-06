@@ -85,4 +85,3 @@ proc muppet::locale_set { locale charset } {
     # Set the default LANG
     sh update-locale "LANG=${locale}"
 }
-
