@@ -184,6 +184,14 @@ proc muppet::s3 { args } {
                     lassign $args -> -> bucket remote_path upload_id
                     return [qc::lapply muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_get $bucket ${remote_path}?uploadId=$upload_id] {/ns:ListPartsResult/ns:Part}]]
                 }
+                cleanup {
+                    # usage: s3 upload cleanup bucket 
+                    # aborts any unfinished uploads for bucket
+                    lassign $args -> -> bucket 
+                    foreach dict [muppet::s3 upload ls $bucket] {
+                        muppet::s3 upload abort $bucket "/[dict get $dict Key]" [dict get $dict UploadId]
+                    }
+                }
                 complete {
                     # usage: s3 upload complete bucket remote_path upload_id
                     lassign $args -> -> bucket remote_path upload_id
