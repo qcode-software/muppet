@@ -98,7 +98,7 @@ proc muppet::s3_put { args } {
     if { [info exists data]} {
         set content_type "application/octet-stream"
         set content_md5 [::base64::encode [::md5::md5 $data]]
-        set data_size [string bytelength $data]
+        set data_size [string length $data]
     } elseif { [info exists infile]} {
         set content_type [qc::mime_type_guess $infile]
         set content_md5 [::base64::encode [::md5::md5 -file $infile]]
@@ -114,6 +114,7 @@ proc muppet::s3_put { args } {
     lappend headers Content-Type $content_type
     # Stop tclcurl from stending Transfer-Encoding header
     lappend headers Transfer-Encoding {}
+    lappend headers Expect {}
     # Have timeout values roughly in proportion to the filesize
     # In this case allowing 100,000 bytes per second
     set timeout [expr {$data_size/100000}]
@@ -201,7 +202,7 @@ proc muppet::s3 { args } {
                     # usage: s3 upload send bucket local_path remote_path upload_id
                     lassign $args -> -> bucket local_path remote_path upload_id
                     # bytes
-                    set part_size [expr {1024*1024*100}]
+                    set part_size [expr {1024*1024*50}]
                     set part_index 1
                     set file_size [file size $local_path]
                     if {$file_size < [expr {1024*1024*5}]} { error "AWS requires a file size of at least 5MB for multipart upload." }
@@ -211,10 +212,20 @@ proc muppet::s3 { args } {
                     while { $part_index <= $num_parts } {
                         set data [read $fh $part_size]
                         puts "Uploading ${local_path}: Sending part $part_index of $num_parts"
-                        muppet::s3_put -data $data $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id
+
+                        # Use temp file to upload part from - inefficient, but posting binary data directly from http_put not yet working.
+                        set tempfile [exec tempfile]
+                        set tempfh [open $tempfile w]
+                        fconfigure $tempfh -translation binary
+                        puts -nonewline $tempfh $data
+                        close $tempfh
+
+                        muppet::s3_put -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id
+                        file delete $tempfile
                         incr part_index
                     }
                     close $fh
+
                 }
                 default {
                     # Top level multipart upload
