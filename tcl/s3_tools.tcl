@@ -240,6 +240,7 @@ proc muppet::s3 { args } {
                         close $tempfh
                     
                         while { !$timeout } {
+                            # TODO implement exponential backoff for retries
                             try {
                                 set response [muppet::s3_put -header 1 -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
                             } {
