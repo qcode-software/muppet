@@ -171,7 +171,8 @@ proc muppet::s3 { args } {
                     lassign $args -> -> bucket remote_path
                     set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post $bucket ${remote_path}?uploads] {/ns:InitiateMultipartUploadResult}]]
                     set upload_id [dict get $upload_dict UploadId]
-                    puts "Upload init for $remote_path to $bucket. Upload_id: $upload_id"
+                    puts "Upload init for $remote_path to $bucket."
+                    puts "Upload_id: $upload_id"
                     return $upload_id
                 }
                 abort {
@@ -193,8 +194,6 @@ proc muppet::s3 { args } {
                     # usage: s3 upload complete bucket remote_path upload_id etag_dict
                     lassign $args -> -> bucket remote_path upload_id etag_dict
                     set xml {<CompleteMultipartUpload>}
-                    # TODO should really keep a track of Etag PartNumber pairs from the return headers of each part's
-                    # upload
                     foreach PartNumber [dict keys $etag_dict] {
                         set ETag [dict get $etag_dict $PartNumber]
                         lappend xml "<Part>[qc::xml_from PartNumber ETag]</Part>"
@@ -214,42 +213,41 @@ proc muppet::s3 { args } {
                     set etag_dict [dict create]
                     set file_size [file size $local_path]
                     # Timeout - allow 10240 B/s
-                    set timeout false
+                    global s3_timeout
+                    set s3_timeout($upload_id) false
                     set timeout_period [expr {($file_size/10240)*1000}]
                     puts "Timeout set as $timeout_period ms"
-                    set id [after $timeout_period { 
-                        puts "timeout triggered"
-                        set timeout true
-                    }]
-                    set num_parts [expr {round(ceil($file_size/"$part_size.0"))}]
+                    set id [after $timeout_period [list set s3_timeout($upload_id) true]]
+                    set num_parts [expr {round(ceil($file_size/double($part_size)))}]
                     set fh [open $local_path r]
                     fconfigure $fh -translation binary
-                    while { !$timeout } {
-                        set data [read $fh $part_size]
-                        puts "Uploading ${local_path}: Sending part $part_index of $num_parts"
-                        muppet::s3_put -data $data $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id
-                        incr part_index
-                    }
-                    close $fh
+                    while { !$s3_timeout($upload_id) &&  $part_index <= $num_parts } {
 
                         # Use temp file to upload part from - inefficient, but posting binary data directly from http_put not yet working.
                         set tempfile [::fileutil::tempfile]
                         set tempfh [open $tempfile w]
                         fconfigure $tempfh -translation binary
-                        puts -nonewline $tempfh $data
+                        puts "Uploading ${local_path}: Sending part $part_index of $num_parts"
+                        puts -nonewline $tempfh [read $fh $part_size]
                         close $tempfh
-                    
-                        while { !$timeout } {
-                            # TODO implement exponential backoff for retries
+                        
+                        set success false 
+                        set attempt 1
+                        while { !$s3_timeout($upload_id) && !$success } {
                             try {
                                 set response [muppet::s3_put -header 1 -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
+                                set success true
                             } {
-                                puts "Failed - retrying part $part_index of ${num_parts}... "
+                                puts stderr "Failed - retrying part $part_index of ${num_parts}... "
+                                after [expr {int(pow(2,$attempt)-1)}]
+                                incr attempt
                             }
                         }
-                        if { $timeout } { 
+                        if { $s3_timeout($upload_id) } { 
                             #TODO should we abort or leave for potential recovery later?
-                            muppet::s3 upload abort $bucket $remote_path $upload_id
+                            try {
+                                muppet::s3 upload abort $bucket $remote_path $upload_id
+                            }
                             error "Upload timed out"
                         }
                         regexp -line -- {^ETag: "(\S+)"\s*$} $response match etag
@@ -259,6 +257,8 @@ proc muppet::s3 { args } {
                         incr part_index
                     }
                     close $fh
+                    after cancel $id
+                    unset s3_timeout($upload_id)
                     return $etag_dict
 
                 }
