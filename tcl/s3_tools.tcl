@@ -4,6 +4,7 @@ package require sha1
 package require md5
 package require base64
 package require tdom
+package require fileutil
 namespace eval muppet {
     namespace export *
 } 
@@ -93,8 +94,8 @@ proc muppet::s3_save { bucket path filename } {
 
 proc muppet::s3_put { args } {
     #| Construct the http PUT request to S3 including auth headers
-    # s3_put ?-data ? ?-infile ? bucket path 
-    qc::args $args -data ? -infile ? bucket path 
+    # s3_put ?-header 0 ?-data ? ?-infile ? bucket path 
+    qc::args $args -header 0 -data ? -infile ? bucket path 
     if { [info exists data]} {
         set content_type "application/octet-stream"
         set content_md5 [::base64::encode [::md5::md5 $data]]
@@ -120,10 +121,10 @@ proc muppet::s3_put { args } {
     set timeout [expr {$data_size/100000}]
     if { [info exists data] } {
         # data
-        return [qc::http_put -headers $headers -timeout $timeout -data $data [s3_url $bucket]$path]
+        return [qc::http_put -header $header -headers $headers -timeout $timeout -data $data [s3_url $bucket]$path]
     } else {
         # file
-        return [qc::http_put -headers $headers -timeout $timeout -infile $infile [s3_url $bucket]$path]
+        return [qc::http_put -header $header -headers $headers -timeout $timeout -infile $infile [s3_url $bucket]$path]
     }
 }
 
@@ -157,7 +158,12 @@ proc muppet::s3 { args } {
             # usage: s3 put bucket local_path remote_path
             # 5GB limit
             lassign $args -> bucket local_path remote_path
-            muppet::s3_put -infile $local_path $bucket $remote_path
+            if { [file size $local_path] > [expr {1024*1024*5}]} { 
+                # Use multipart upload
+                muppet::s3 upload $bucket $local_path $remote_path
+            } else {
+                muppet::s3_put -infile $local_path $bucket $remote_path
+            }
         }
         upload {
             switch [lindex $args 1] {
@@ -166,7 +172,8 @@ proc muppet::s3 { args } {
                     lassign $args -> -> bucket remote_path
                     set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post $bucket ${remote_path}?uploads] {/ns:InitiateMultipartUploadResult}]]
                     set upload_id [dict get $upload_dict UploadId]
-                    puts "Upload init for $remote_path to $bucket. Upload_id: $upload_id"
+                    puts "Upload init for $remote_path to $bucket."
+                    puts "Upload_id: $upload_id"
                     return $upload_id
                 }
                 abort {
@@ -193,13 +200,12 @@ proc muppet::s3 { args } {
                     }
                 }
                 complete {
-                    # usage: s3 upload complete bucket remote_path upload_id
-                    lassign $args -> -> bucket remote_path upload_id
+                    # usage: s3 upload complete bucket remote_path upload_id etag_dict
+                    lassign $args -> -> bucket remote_path upload_id etag_dict
                     set xml {<CompleteMultipartUpload>}
-                    # TODO should really keep a track of Etag PartNumber pairs from the return headers of each part's
-                    # upload
-                    foreach dict [muppet::s3 upload lsparts $bucket $remote_path $upload_id] {
-                        lappend xml "<Part>[qc::dict2xml [qc::dict_subset $dict PartNumber ETag]]</Part>"
+                    foreach PartNumber [dict keys $etag_dict] {
+                        set ETag [dict get $etag_dict $PartNumber]
+                        lappend xml "<Part>[qc::xml_from PartNumber ETag]</Part>"
                     }
                     lappend xml {</CompleteMultipartUpload>}
                     puts "Completing Upload to $remote_path in $bucket."
@@ -210,15 +216,26 @@ proc muppet::s3 { args } {
                     # usage: s3 upload send bucket local_path remote_path upload_id
                     lassign $args -> -> bucket local_path remote_path upload_id
                     # bytes
-                    set part_size [expr {1024*1024*50}]
+                    set part_size [expr {1024*1024*5}]
+                    set retries 3
                     set part_index 1
+                    set etag_dict [dict create]
                     set file_size [file size $local_path]
-                    if {$file_size < [expr {1024*1024*5}]} { error "AWS requires a file size of at least 5MB for multipart upload." }
-                    set num_parts [expr {round(ceil($file_size/"$part_size.0"))}]
+                    # Timeout - allow 10240 B/s
+                    global s3_timeout
+                    set s3_timeout($upload_id) false
+                    set timeout_period [expr {($file_size/10240)*1000}]
+                    puts "Timeout set as $timeout_period ms"
+                    set id [after $timeout_period [list set s3_timeout($upload_id) true]]
+                    set num_parts [expr {round(ceil($file_size/double($part_size)))}]
                     set fh [open $local_path r]
                     fconfigure $fh -translation binary
-                    while { $part_index <= $num_parts } {
-                        set data [read $fh $part_size]
+                    while { !$s3_timeout($upload_id) &&  $part_index <= $num_parts } {
+
+                        # Use temp file to upload part from - inefficient, but posting binary data directly from http_put not yet working.
+                        set tempfile [::fileutil::tempfile]
+                        set tempfh [open $tempfile w]
+                        fconfigure $tempfh -translation binary
                         puts "Uploading ${local_path}: Sending part $part_index of $num_parts"
 
                         # Use temp file to upload part from - inefficient, but posting binary data directly from http_put not yet working.
@@ -229,10 +246,38 @@ proc muppet::s3 { args } {
                         close $tempfh
 
                         muppet::s3_put -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id
+                        puts -nonewline $tempfh [read $fh $part_size]
+                        close $tempfh
+                        
+                        set success false 
+                        set attempt 1
+                        while { !$s3_timeout($upload_id) && !$success } {
+                            try {
+                                set response [muppet::s3_put -header 1 -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
+                                set success true
+                            } {
+                                puts stderr "Failed - retrying part $part_index of ${num_parts}... "
+                                after [expr {int(pow(2,$attempt)-1)}]
+                                incr attempt
+                            }
+                        }
+                        if { $s3_timeout($upload_id) } { 
+                            #TODO should we abort or leave for potential recovery later?
+                            try {
+                                muppet::s3 upload abort $bucket $remote_path $upload_id
+                            }
+                            error "Upload timed out"
+                        }
+                        regexp -line -- {^ETag: "(\S+)"\s*$} $response match etag
+                      
+                        dict set etag_dict $part_index $etag
                         file delete $tempfile
                         incr part_index
                     }
                     close $fh
+                    after cancel $id
+                    unset s3_timeout($upload_id)
+                    return $etag_dict
 
                 }
                 default {
@@ -241,8 +286,8 @@ proc muppet::s3 { args } {
                     # TODO could be extended to retry upload part failures
                     lassign $args -> bucket local_path remote_path 
                     set upload_id [muppet::s3 upload init $bucket $remote_path]
-                    muppet::s3 upload send $bucket $local_path $remote_path $upload_id
-                    muppet::s3 upload complete $bucket $remote_path $upload_id
+                    set etag_dict [muppet::s3 upload send $bucket $local_path $remote_path $upload_id]
+                    muppet::s3 upload complete $bucket $remote_path $upload_id $etag_dict
                 }
             }
         }
