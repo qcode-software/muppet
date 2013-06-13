@@ -237,18 +237,9 @@ proc muppet::s3 { args } {
                         set tempfh [open $tempfile w]
                         fconfigure $tempfh -translation binary
                         puts "Uploading ${local_path}: Sending part $part_index of $num_parts"
-
-                        # Use temp file to upload part from - inefficient, but posting binary data directly from http_put not yet working.
-                        set tempfile [exec tempfile]
-                        set tempfh [open $tempfile w]
-                        fconfigure $tempfh -translation binary
-                        puts -nonewline $tempfh $data
-                        close $tempfh
-
-                        muppet::s3_put -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id
                         puts -nonewline $tempfh [read $fh $part_size]
                         close $tempfh
-                        
+
                         set success false 
                         set attempt 1
                         while { !$s3_timeout($upload_id) && !$success } {
