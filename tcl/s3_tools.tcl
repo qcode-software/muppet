@@ -1,5 +1,5 @@
 package provide muppet 1.0
-package require qcode 1.17
+package require qcode
 package require sha1
 package require md5
 package require base64

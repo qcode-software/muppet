@@ -1,5 +1,5 @@
 package provide muppet 1.0
-package require qcode 1.17
+package require qcode
 namespace eval muppet {}
 
 proc muppet::ssh_user_private_key { user private_key {filename "id_rsa"}} {
