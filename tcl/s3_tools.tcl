@@ -11,6 +11,7 @@ namespace eval muppet {
 
 proc muppet::s3_url {bucket} {
     set base s3.amazonaws.com
+    #set base s3-external-3.amazonaws.com
     if { $bucket eq ""} {
         return $base
     } else {
@@ -26,8 +27,8 @@ proc muppet::s3_auth_headers { args } {
     # eg s3_auth_headers -content_type image/jpeg -content_md5 xxxxxx PUT /pics/image.jpg mybucket
 
     # AWS credentials
-    set access_key [dict get [qc::param aws] access_key]
-    set secret_access_key [dict get [qc::param aws] secret_access_key]
+    set access_key [dict get [qc::param [qc::param aws_default]] access_key]
+    set secret_access_key [dict get [qc::param [qc::param aws_default]] secret_access_key]
 
     set date [qc::format_timestamp_http now]
    

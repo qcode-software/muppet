@@ -95,7 +95,7 @@ proc muppet::aws_endpoint_change {} {
 }
 
 proc muppet::aws_credentials_set {} {
-    #| Sets aws crediatials referred to by the aws_default
+    #| Sets aws credentials referred to by the aws_default
     # eg.
     # variable aws_default aws_testing
     # variable aws_testing [list access_key "XXXXXXXXXXXXXX" secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
