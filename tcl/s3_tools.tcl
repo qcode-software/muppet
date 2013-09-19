@@ -68,11 +68,19 @@ proc muppet::s3_get { bucket path } {
     return $result
 }
 
+proc muppet::s3_head { bucket path } {
+    #| Construct the http HEAD request to S3 including auth headers
+    set headers [s3_auth_headers HEAD $path $bucket] 
+    set result [qc::http_head -headers $headers [s3_url $bucket]$path]
+    return $result
+}
+
 proc muppet::s3_post { bucket path {data ""}} {
     #| Construct the http POST request to S3 including auth headers
     set headers [s3_auth_headers POST $path $bucket] 
     lappend headers Content-Type {}
     if { $data ne "" } {
+        lappend headers [list Content-MD5: [::base64::encode [::md5::md5 $data]]]
         set result [qc::http_post -headers $headers -data $data [s3_url $bucket]$path]
     } else {
         set result [qc::http_post -headers $headers [s3_url $bucket]$path]
@@ -155,6 +163,10 @@ proc muppet::s3 { args } {
             # usage: s3 get bucket remote_path local_path
             muppet::s3_save {*}[lrange $args 1 end]
         }
+        head {
+            # usage: s3 head bucket remote_path
+            muppet::s3_head {*}[lrange $args 1 end]
+        }       
         put {
             # usage: s3 put bucket local_path remote_path
             # 5GB limit
@@ -165,6 +177,13 @@ proc muppet::s3 { args } {
             } else {
                 muppet::s3_put -infile $local_path $bucket $remote_path
             }
+        }
+        restore {
+            # usage: s3 restore bucket remote_path days
+            # Requests restore of object from Glacier storage to S3 storage for $days days
+            lassign $args -> bucket remote_path Days
+            set data "<RestoreRequest>[qc::xml_from Days]</RestoreRequest>"
+            muppet::s3_post $bucket $remote_path $data
         }
         upload {
             switch [lindex $args 1] {
