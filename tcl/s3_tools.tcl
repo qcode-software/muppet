@@ -34,7 +34,7 @@ proc muppet::s3_auth_headers { args } {
    
     if { $bucket ne "" } {
         # Is there a subresource specified?
-        set subresources [list "acl" "lifecycle" "location" "logging" "notification" "partNumber" "policy" "requestPayment" "torrent" "uploadId" "uploads" "versionId" "versioning" "versions" "website"]
+        set subresources [list "acl" "lifecycle" "location" "logging" "notification" "partNumber" "policy" "requestPayment" "torrent" "uploadId" "uploads" "versionId" "versioning" "versions" "website" "restore"]
         if { [regexp {^[^\?]+\?([A-Za-z]+).*$} $path -> resource] && [qc::in $subresources $resource] } {
             set canonicalized_resource "/${bucket}${path}"
         } else {
@@ -77,12 +77,16 @@ proc muppet::s3_head { bucket path } {
 
 proc muppet::s3_post { bucket path {data ""}} {
     #| Construct the http POST request to S3 including auth headers
-    set headers [s3_auth_headers POST $path $bucket] 
-    lappend headers Content-Type {}
     if { $data ne "" } {
-        lappend headers [list Content-MD5: [::base64::encode [::md5::md5 $data]]]
-        set result [qc::http_post -headers $headers -data $data [s3_url $bucket]$path]
+        set content_type {application/xml}
+        set content_md5 [::base64::encode [::md5::md5 $data]]
+        set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 POST $path $bucket] 
+        lappend headers Content-MD5 $content_md5
+        lappend headers Content-Type $content_type
+        set result [qc::http_post -valid_response_codes {100 200 202} -headers $headers -data $data [s3_url $bucket]$path]
     } else {
+        set content_type {application/x-www-form-urlencoded}
+        set headers [s3_auth_headers -content_type $content_type POST $path $bucket] 
         set result [qc::http_post -headers $headers [s3_url $bucket]$path]
     }
     return $result
@@ -182,8 +186,11 @@ proc muppet::s3 { args } {
             # usage: s3 restore bucket remote_path days
             # Requests restore of object from Glacier storage to S3 storage for $days days
             lassign $args -> bucket remote_path Days
+            if { ![info exists Days] } {
+                error "Missing argument. Usage: muppet s3 restore bucket remote_path days"
+            }
             set data "<RestoreRequest>[qc::xml_from Days]</RestoreRequest>"
-            muppet::s3_post $bucket $remote_path $data
+            muppet::s3_post $bucket ${remote_path}?restore $data
         }
         upload {
             switch [lindex $args 1] {
