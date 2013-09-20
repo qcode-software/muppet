@@ -99,10 +99,11 @@ proc muppet::s3_delete { bucket path } {
     return $result
 }
 
-proc muppet::s3_save { bucket path filename } {
+proc muppet::s3_save { args } {
     #| Construct the http SAVE request to S3 including auth headers
+    args $args -timeout 60 -- bucket path filename
     set headers [s3_auth_headers GET $path $bucket] 
-    return [qc::http_save -headers $headers [s3_url $bucket]$path $filename]
+    return [qc::http_save -timeout  $timeout -headers $headers [s3_url $bucket]$path $filename]
 }
 
 proc muppet::s3_put { args } {
@@ -164,30 +165,55 @@ proc muppet::s3 { args } {
 	    return [qc::lapply muppet::s3_xml_node2dict [muppet::s3_xml_select $xmlDoc {/ns:ListBucketResult/ns:Contents}]]
         }
         get {
-            # usage: s3 get bucket remote_path local_path
-            muppet::s3_save {*}[lrange $args 1 end]
+            # usage: s3 get bucket remote_filename local_filename
+            if { [llength $args] < 3 || [llength $args] > 4 } {
+                error "Wrong number of arguments. Usage: muppet::s3 get mybucket remote_filename {local_filename}"
+            } elseif { [llength $args] == 3 } {
+                # No local filename, assume same as remote_filename in current directory
+                lassign $args -> bucket remote_filename 
+                set local_filename "./[file tail $remote_filename]"
+            } else {
+                lassign $args -> bucket remote_filename local_filename
+            }
+            if { [file exists $local_filename] } {
+                error "File $local_filename already exists."
+            }
+            set file_size [dict get [muppet::s3 head $bucket $remote_filename] Content-Length]
+            # set timeout - allow 1Mb/s
+            set timeout_secs [expr {(${file_size}*8)/1000000}]
+            puts "Timeout set at $timeout_secs seconds"
+            muppet::s3_save -timeout $timeout_secs $bucket $remote_filename $local_filename
         }
         head {
             # usage: s3 head bucket remote_path
             muppet::s3_head {*}[lrange $args 1 end]
         }       
         put {
-            # usage: s3 put bucket local_path remote_path
+            # usage: s3 put bucket local_path {remote_filename}
             # 5GB limit
-            lassign $args -> bucket local_path remote_path
-            if { [file size $local_path] > [expr {1024*1024*5}]} { 
-                # Use multipart upload
-                muppet::s3 upload $bucket $local_path $remote_path
+            if { [llength $args] < 3 || [llength $args] > 4 } {
+                error "Wrong number of arguments. Usage: muppet::s3 put mybucket local_filename {remote_filename}"
+            } elseif { [llength $args] == 3 } {
+                # No remote filename, assume same as local_filename
+                lassign $args -> bucket local_filename 
+                set remote_filename "/[file tail $local_filename]"
             } else {
-                muppet::s3_put -infile $local_path $bucket $remote_path
+                lassign $args -> bucket local_filename remote_filename
+            }
+
+            if { [file size $local_filename] > [expr {1024*1024*5}]} { 
+                # Use multipart upload
+                muppet::s3 upload $bucket $local_filename $remote_filename
+            } else {
+                muppet::s3_put -infile $local_filename $bucket $remote_filename
             }
         }
         restore {
             # usage: s3 restore bucket remote_path days
             # Requests restore of object from Glacier storage to S3 storage for $days days
             lassign $args -> bucket remote_path Days
-            if { ![info exists Days] } {
-                error "Missing argument. Usage: muppet s3 restore bucket remote_path days"
+            if { [llength $args] != 4  } {
+                error "Invalid number of arguments. Usage: muppet s3 restore bucket remote_path days"
             }
             set data "<RestoreRequest>[qc::xml_from Days]</RestoreRequest>"
             muppet::s3_post $bucket ${remote_path}?restore $data
@@ -251,9 +277,9 @@ proc muppet::s3 { args } {
                     # Timeout - allow 10240 B/s
                     global s3_timeout
                     set s3_timeout($upload_id) false
-                    set timeout_period [expr {($file_size/10240)*1000}]
-                    puts "Timeout set as $timeout_period ms"
-                    set id [after $timeout_period [list set s3_timeout($upload_id) true]]
+                    set timeout_ms [expr {($file_size/10240)*1000}]
+                    puts "Timeout set as $timeout_ms ms"
+                    set id [after $timeout_ms [list set s3_timeout($upload_id) true]]
                     set num_parts [expr {round(ceil($file_size/double($part_size)))}]
                     set fh [open $local_path r]
                     fconfigure $fh -translation binary
@@ -314,7 +340,7 @@ proc muppet::s3 { args } {
             muppet::s3_delete {*}[lrange $args 1 end]
         }
         default {
-            error "Unknown s3 command. Must be one of ls, lsbucket, get, put or delete."
+            error "Unknown s3 command."
         }
     }
 }
