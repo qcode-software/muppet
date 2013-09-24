@@ -23,7 +23,7 @@ proc muppet::s3_auth_headers { args } {
     #| Constructs the required s3 authentication header for the request type in question.
     #| See: http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html
  
-    qc::args $args -content_type "" -content_md5 "" -- verb path bucket 
+    qc::args $args -amz_headers "" -content_type "" -content_md5 "" -- verb path bucket 
     # eg s3_auth_headers -content_type image/jpeg -content_md5 xxxxxx PUT /pics/image.jpg mybucket
 
     # AWS credentials
@@ -45,8 +45,23 @@ proc muppet::s3_auth_headers { args } {
         set canonicalized_resource "/"
     }
 
-    # TODO ignoring canonicalized_amz_headers
-    set canonicalized_amz_headers  ""
+    # amz_headers format {header value header value ...}
+    if { $amz_headers eq "" } {
+        set canonicalized_amz_headers  ""
+    } else {
+        foreach {header value} $amz_headers {
+            if { [info exists amz_header_array([qc::lower $header])] } {
+                lappend amz_header_array([qc::lower $header]) $value
+            } else {
+                set amz_header_array([qc::lower $header]) $value
+            }
+        }
+        set canonicalized_amz_headers  ""
+        foreach key [lsort [array names amz_header_array]] {
+            lappend canonicalized_amz_headers "${key}:[join $amz_header_array($key) ,]\u000A"
+        }
+        set canonicalized_amz_headers [join $canonicalized_amz_headers ""]
+    }
 
     # Contruct string for hmac signing
     set string_to_sign "$verb"
@@ -101,15 +116,15 @@ proc muppet::s3_delete { bucket path } {
 
 proc muppet::s3_save { args } {
     #| Construct the http SAVE request to S3 including auth headers
-    args $args -timeout 60 -- bucket path filename
+    qc::args $args -timeout 60 -- bucket path filename
     set headers [s3_auth_headers GET $path $bucket] 
     return [qc::http_save -timeout  $timeout -headers $headers [s3_url $bucket]$path $filename]
 }
 
 proc muppet::s3_put { args } {
     #| Construct the http PUT request to S3 including auth headers
-    # s3_put ?-header 0 ?-data ? ?-infile ? bucket path 
-    qc::args $args -header 0 -data ? -infile ? bucket path 
+    # s3_put ?-header 0 ?-data ? ?-infile ? ?-s3_copy ?bucket path 
+    qc::args $args -header 0 -s3_copy ? -data ? -infile ? bucket path
     if { [info exists data]} {
         set content_type "application/octet-stream"
         set content_md5 [::base64::encode [::md5::md5 $data]]
@@ -118,8 +133,14 @@ proc muppet::s3_put { args } {
         set content_type [qc::mime_type_guess $infile]
         set content_md5 [::base64::encode [::md5::md5 -file $infile]]
         set data_size [file size $infile]
+    } elseif { [info exists s3_copy] } {
+        # we're copying a S3 file - skip the data processing and send the PUT request with x-amz-copy-source header
+        set headers [s3_auth_headers -content_type {} -amz_headers [list "x-amz-copy-source" $s3_copy] PUT $path $bucket]
+        lappend headers x-amz-copy-source $s3_copy
+        lappend headers Content-Type {}
+        return [qc::http_put -header $header -headers $headers -data {} [s3_url $bucket]$path]
     } else {
-        error "muppet::s3_put: 1 of -data or -infile must be specified"
+        error "muppet::s3_put: 1 of -data, -infile or -s3_copy must be specified"
     }
     # content_md5 header allows AWS to return an error if the file received has a different md5
     # Authentication value needs to use content_* values for hmac signing
@@ -147,7 +168,7 @@ proc muppet::s3 { args } {
     # Usage: s3 subcommand {args}
     switch [lindex $args 0] {
         ls {
-            # usage: s3 ls
+            # usage: s3 ls 
             set nodes [muppet::s3_xml_select [muppet::s3_get "" /] {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket}]
             return [qc::lapply muppet::s3_xml_node2dict $nodes]
         }
@@ -180,7 +201,7 @@ proc muppet::s3 { args } {
             }
             set file_size [dict get [muppet::s3 head $bucket $remote_filename] Content-Length]
             # set timeout - allow 1Mb/s
-            set timeout_secs [expr {(${file_size}*8)/1000000}]
+            set timeout_secs [expr {max( (${file_size}*8)/1000000 , 60)} ]
             puts "Timeout set at $timeout_secs seconds"
             muppet::s3_save -timeout $timeout_secs $bucket $remote_filename $local_filename
         }
@@ -188,6 +209,11 @@ proc muppet::s3 { args } {
             # usage: s3 head bucket remote_path
             muppet::s3_head {*}[lrange $args 1 end]
         }       
+        copy {
+            # usage: s3 copy bucket bucket/remote_filename_to_copy remote_filename_copy
+            lassign $args -> bucket remote_filename remote_filename_copy
+            muppet::s3_put -s3_copy $remote_filename $bucket $remote_filename_copy
+        }
         put {
             # usage: s3 put bucket local_path {remote_filename}
             # 5GB limit
