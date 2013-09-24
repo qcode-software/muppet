@@ -90,9 +90,11 @@ proc muppet::s3_head { bucket path } {
     return $result
 }
 
-proc muppet::s3_post { bucket path {data ""}} {
+proc muppet::s3_post { args } {
+    qc::args $args -amz_headers "" bucket path {data ""}
     #| Construct the http POST request to S3 including auth headers
     if { $data ne "" } {
+        # Used for posting XML
         set content_type {application/xml}
         set content_md5 [::base64::encode [::md5::md5 $data]]
         set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 POST $path $bucket] 
@@ -101,8 +103,14 @@ proc muppet::s3_post { bucket path {data ""}} {
         set result [qc::http_post -valid_response_codes {100 200 202} -headers $headers -data $data [s3_url $bucket]$path]
     } else {
         set content_type {application/x-www-form-urlencoded}
-        set headers [s3_auth_headers -content_type $content_type POST $path $bucket] 
-        set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        if { $amz_headers ne "" } {
+            set headers [s3_auth_headers -amz_headers $amz_headers -content_type $content_type POST $path $bucket] 
+            lappend headers {*}$amz_headers
+            set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        } else {
+            set headers [s3_auth_headers -content_type $content_type POST $path $bucket] 
+            set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        }
     }
     return $result
 }
@@ -123,16 +131,31 @@ proc muppet::s3_save { args } {
 
 proc muppet::s3_put { args } {
     #| Construct the http PUT request to S3 including auth headers
-    # s3_put ?-header 0 ?-data ? ?-infile ? ?-s3_copy ?bucket path 
-    qc::args $args -header 0 -s3_copy ? -data ? -infile ? bucket path
-    if { [info exists data]} {
-        set content_type "application/octet-stream"
-        set content_md5 [::base64::encode [::md5::md5 $data]]
-        set data_size [string length $data]
-    } elseif { [info exists infile]} {
+    # s3_put ?-header 0 ?-infile ? ?-s3_copy ?bucket path 
+    qc::args $args -nochecksum -header 0 -s3_copy ? -infile ? bucket path
+    if { [info exists infile]} {
         set content_type [qc::mime_type_guess $infile]
         set content_md5 [::base64::encode [::md5::md5 -file $infile]]
         set data_size [file size $infile]
+        if { [info exists nochecksum] } {
+            # Dont send metadata for upload parts
+            set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
+        } else {
+            # content_md5 header allows AWS to return an error if the file received has a different md5
+            # Authentication value needs to use content_* values for hmac signing
+            set headers [s3_auth_headers -amz_headers [list "x-amz-meta-content-md5" $content_md5] -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
+            lappend headers x-amz-meta-content-md5 $content_md5
+        }
+        lappend headers Content-Length $data_size
+        lappend headers Content-MD5 $content_md5
+        lappend headers Content-Type $content_type
+        # Stop tclcurl from stending Transfer-Encoding header
+        lappend headers Transfer-Encoding {}
+        lappend headers Expect {}
+        # Have timeout values roughly in proportion to the filesize
+        # In this case allowing 100,000 bytes per second
+        set timeout [expr {$data_size/100000}]
+        return [qc::http_put -header $header -headers $headers -timeout $timeout -infile $infile [s3_url $bucket]$path]
     } elseif { [info exists s3_copy] } {
         # we're copying a S3 file - skip the data processing and send the PUT request with x-amz-copy-source header
         set headers [s3_auth_headers -content_type {} -amz_headers [list "x-amz-copy-source" $s3_copy] PUT $path $bucket]
@@ -140,33 +163,21 @@ proc muppet::s3_put { args } {
         lappend headers Content-Type {}
         return [qc::http_put -header $header -headers $headers -data {} [s3_url $bucket]$path]
     } else {
-        error "muppet::s3_put: 1 of -data, -infile or -s3_copy must be specified"
+        error "muppet::s3_put: 1 of -infile or -s3_copy must be specified"
     }
-    # content_md5 header allows AWS to return an error if the file received has a different md5
-    # Authentication value needs to use content_* values for hmac signing
-    set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
-    lappend headers Content-Length $data_size
-    lappend headers Content-MD5 $content_md5
-    lappend headers Content-Type $content_type
-    # Stop tclcurl from stending Transfer-Encoding header
-    lappend headers Transfer-Encoding {}
-    lappend headers Expect {}
-    # Have timeout values roughly in proportion to the filesize
-    # In this case allowing 100,000 bytes per second
-    set timeout [expr {$data_size/100000}]
-    if { [info exists data] } {
-        # data
-        return [qc::http_put -header $header -headers $headers -timeout $timeout -data $data [s3_url $bucket]$path]
-    } else {
-        # file
-        return [qc::http_put -header $header -headers $headers -timeout $timeout -infile $infile [s3_url $bucket]$path]
-    }
+
 }
 
 proc muppet::s3 { args } {
     #| Access Amazon S3 buckets via REST API
     # Usage: s3 subcommand {args}
     switch [lindex $args 0] {
+        md5 {
+            #| Just print the base64 md5 of a local file for reference
+            # usage: s3 md5 filename
+            lassign $args -> filename 
+            return "[::base64::encode [::md5::md5 -file $filename]]"
+        }
         ls {
             # usage: s3 ls 
             set nodes [muppet::s3_xml_select [muppet::s3_get "" /] {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket}]
@@ -247,11 +258,12 @@ proc muppet::s3 { args } {
         upload {
             switch [lindex $args 1] {
                 init {
-                    # s3 upload init bucket remote_path
-                    lassign $args -> -> bucket remote_path
-                    set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post $bucket ${remote_path}?uploads] {/ns:InitiateMultipartUploadResult}]]
+                    # s3 upload init bucket local_file remote_file
+                    lassign $args -> -> bucket local_file remote_file
+                    set content_md5 [::base64::encode [::md5::md5 -file $local_file]]
+                    set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post -amz_headers [list x-amz-meta-content-md5 $content_md5] $bucket ${remote_file}?uploads] {/ns:InitiateMultipartUploadResult}]]
                     set upload_id [dict get $upload_dict UploadId]
-                    puts "Upload init for $remote_path to $bucket."
+                    puts "Upload init for $remote_file to $bucket."
                     puts "Upload_id: $upload_id"
                     return $upload_id
                 }
@@ -323,7 +335,7 @@ proc muppet::s3 { args } {
                         set attempt 1
                         while { !$s3_timeout($upload_id) && !$success } {
                             try {
-                                set response [muppet::s3_put -header 1 -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
+                                set response [muppet::s3_put -header 1 -nochecksum -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
                                 set success true
                             } {
                                 puts stderr "Failed - retrying part $part_index of ${num_parts}... "
@@ -354,10 +366,10 @@ proc muppet::s3 { args } {
                     # Top level multipart upload
                     # usage: s3 upload bucket local_path remote_path
                     # TODO could be extended to retry upload part failures
-                    lassign $args -> bucket local_path remote_path 
-                    set upload_id [muppet::s3 upload init $bucket $remote_path]
-                    set etag_dict [muppet::s3 upload send $bucket $local_path $remote_path $upload_id]
-                    muppet::s3 upload complete $bucket $remote_path $upload_id $etag_dict
+                    lassign $args -> bucket local_file remote_file 
+                    set upload_id [muppet::s3 upload init $bucket $local_file $remote_path]
+                    set etag_dict [muppet::s3 upload send $bucket $local_file $remote_file $upload_id]
+                    muppet::s3 upload complete $bucket $remote_file $upload_id $etag_dict
                 }
             }
         }
