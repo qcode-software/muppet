@@ -176,7 +176,15 @@ proc muppet::s3 { args } {
             #| Just print the base64 md5 of a local file for reference
             # usage: s3 md5 filename
             lassign $args -> filename 
-            return "[::base64::encode [::md5::md5 -file $filename]]"
+            # TODO ::md5 defaults to a tcl-only version of md5 which is not only painfully slow but
+            # appears to give the wrong md5 given large input files.
+            # We can either, ensure critcl or tcl-trf are installed (meaning md5 will use an accelerated C implementation),
+            # or use shell commands.
+            #
+            # set openssl [exec which openssl]
+            # return [exec $openssl dgst -md5 -binary $filename | $openssl enc -base64]
+            # 
+            return [::base64::encode [::md5::md5 -file $filename]]
         }
         ls {
             # usage: s3 ls 
@@ -367,7 +375,7 @@ proc muppet::s3 { args } {
                     # usage: s3 upload bucket local_path remote_path
                     # TODO could be extended to retry upload part failures
                     lassign $args -> bucket local_file remote_file 
-                    set upload_id [muppet::s3 upload init $bucket $local_file $remote_path]
+                    set upload_id [muppet::s3 upload init $bucket $local_file $remote_file]
                     set etag_dict [muppet::s3 upload send $bucket $local_file $remote_file $upload_id]
                     muppet::s3 upload complete $bucket $remote_file $upload_id $etag_dict
                 }
