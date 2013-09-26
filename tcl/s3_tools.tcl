@@ -96,7 +96,7 @@ proc muppet::s3_post { args } {
     if { $data ne "" } {
         # Used for posting XML
         set content_type {application/xml}
-        set content_md5 [::base64::encode [::md5::md5 $data]]
+        set content_md5 [muppet::s3_base64_md5 -data $data]
         set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 POST $path $bucket] 
         lappend headers Content-MD5 $content_md5
         lappend headers Content-Type $content_type
@@ -135,7 +135,7 @@ proc muppet::s3_put { args } {
     qc::args $args -nochecksum -header 0 -s3_copy ? -infile ? bucket path
     if { [info exists infile]} {
         set content_type [qc::mime_type_guess $infile]
-        set content_md5 [::base64::encode [::md5::md5 -file $infile]]
+        set content_md5 [muppet::s3_base64_md5 -file $infile]
         set data_size [file size $infile]
         if { [info exists nochecksum] } {
             # Dont send metadata for upload parts
@@ -168,6 +168,28 @@ proc muppet::s3_put { args } {
 
 }
 
+proc muppet::s3_base64_md5 { args } {
+    args $args -file ? -data ? -- 
+    #| Returns the base64 encoded binary md5 digest of a file or data
+    if { [info exists file] && [info exists data] } {
+        error "muppet::s3_base64_md5: specify only 1 of -file or -data"
+    }
+    if { [info exists data] } {
+        # Just use ::md5 since we don't process chunks of data large enough to cause problems
+        return [::base64::encode [::md5::md5 $data]]
+    } elseif {[info exists file]} {
+        # Will not use ::md5 if Trf isn't installed due to incorrect results & long runtimes for large files
+        if { [qc::in [package names] "Trf"] } {
+            return [::base64::encode [::md5::md5 -file $file]]
+        } else {
+            set openssl [exec which openssl] 
+            return [exec $openssl dgst -md5 -binary $file | $openssl enc -base64]
+        }
+    } else {
+        error "muppet::s3_base64_md5: 1 of -file or -data must be specified"
+    }
+}
+
 proc muppet::s3 { args } {
     #| Access Amazon S3 buckets via REST API
     # Usage: s3 subcommand {args}
@@ -176,15 +198,7 @@ proc muppet::s3 { args } {
             #| Just print the base64 md5 of a local file for reference
             # usage: s3 md5 filename
             lassign $args -> filename 
-            # TODO ::md5 defaults to a tcl-only version of md5 which is not only painfully slow but
-            # appears to give the wrong md5 given large input files.
-            # We can either, ensure critcl or tcl-trf are installed (meaning md5 will use an accelerated C implementation),
-            # or use shell commands.
-            #
-            # set openssl [exec which openssl]
-            # return [exec $openssl dgst -md5 -binary $filename | $openssl enc -base64]
-            # 
-            return [::base64::encode [::md5::md5 -file $filename]]
+            return [muppet::s3_base64_md5 -file $filename]
         }
         ls {
             # usage: s3 ls 
@@ -218,11 +232,21 @@ proc muppet::s3 { args } {
             if { [file exists $local_filename] } {
                 error "File $local_filename already exists."
             }
+            set head_dict [muppet::s3 head $bucket $remote_filename]
+            if { [dict exists $head_dict x-amz-meta-content-md5] } {
+                set base64_md5 [dict get $head_dict x-amz-meta-content-md5]
+            }
             set file_size [dict get [muppet::s3 head $bucket $remote_filename] Content-Length]
             # set timeout - allow 1Mb/s
             set timeout_secs [expr {max( (${file_size}*8)/1000000 , 60)} ]
             puts "Timeout set at $timeout_secs seconds"
             muppet::s3_save -timeout $timeout_secs $bucket $remote_filename $local_filename
+            if { [info exists base64_md5] } {
+                # Check the base64 md5 of the downloaded file matches what we put in the x-amz-meta-content-md5 metadata on upload
+                if { [set local_md5 [muppet::s3_base64_md5 -file $local_filename]] ne $base64_md5 } {
+                    error "muppet::s3 get: md5 of downloaded file $local_filename ($local_md5) does not match x-amz-meta-content-md5 ($base64_md5)."
+                }
+            }
         }
         head {
             # usage: s3 head bucket remote_path
@@ -268,7 +292,7 @@ proc muppet::s3 { args } {
                 init {
                     # s3 upload init bucket local_file remote_file
                     lassign $args -> -> bucket local_file remote_file
-                    set content_md5 [::base64::encode [::md5::md5 -file $local_file]]
+                    set content_md5 [muppet::s3_base64_md5 -file $local_file]
                     set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post -amz_headers [list x-amz-meta-content-md5 $content_md5] $bucket ${remote_file}?uploads] {/ns:InitiateMultipartUploadResult}]]
                     set upload_id [dict get $upload_dict UploadId]
                     puts "Upload init for $remote_file to $bucket."
