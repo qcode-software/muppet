@@ -11,7 +11,7 @@ proc muppet::naviserver_install {} {
     file attributes /var/log/naviserver/ -owner nsd -group nsd -permissions 0770
     file mkdir /var/run/naviserver/
     file attributes /var/run/naviserver/ -owner nsd -group nsd -permissions 0770
-    install naviserver naviserver-core naviserver-nsdbpg daemontools daemontools-run
+    install naviserver naviserver-core naviserver-nsdbpg
     sh update-rc.d -f naviserver remove
 }
 
