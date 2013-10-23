@@ -169,7 +169,7 @@ proc muppet::s3_put { args } {
 }
 
 proc muppet::s3_base64_md5 { args } {
-    args $args -file ? -data ? -- 
+    qc::args $args -file ? -data ? -- 
     #| Returns the base64 encoded binary md5 digest of a file or data
     if { [info exists file] && [info exists data] } {
         error "muppet::s3_base64_md5: specify only 1 of -file or -data"
