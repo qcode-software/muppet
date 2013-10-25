@@ -11,6 +11,7 @@ namespace eval muppet {
 
 proc muppet::s3_url {bucket} {
     set base s3.amazonaws.com
+    #set base s3-external-3.amazonaws.com
     if { $bucket eq ""} {
         return $base
     } else {
@@ -22,18 +23,18 @@ proc muppet::s3_auth_headers { args } {
     #| Constructs the required s3 authentication header for the request type in question.
     #| See: http://docs.aws.amazon.com/AmazonS3/latest/dev/RESTAuthentication.html
  
-    qc::args $args -content_type "" -content_md5 "" -- verb path bucket 
+    qc::args $args -amz_headers "" -content_type "" -content_md5 "" -- verb path bucket 
     # eg s3_auth_headers -content_type image/jpeg -content_md5 xxxxxx PUT /pics/image.jpg mybucket
 
     # AWS credentials
-    set access_key [dict get [qc::param aws] access_key]
-    set secret_access_key [dict get [qc::param aws] secret_access_key]
+    set access_key [dict get [qc::param [qc::param aws_default]] access_key]
+    set secret_access_key [dict get [qc::param [qc::param aws_default]] secret_access_key]
 
     set date [qc::format_timestamp_http now]
    
     if { $bucket ne "" } {
         # Is there a subresource specified?
-        set subresources [list "acl" "lifecycle" "location" "logging" "notification" "partNumber" "policy" "requestPayment" "torrent" "uploadId" "uploads" "versionId" "versioning" "versions" "website"]
+        set subresources [list "acl" "lifecycle" "location" "logging" "notification" "partNumber" "policy" "requestPayment" "torrent" "uploadId" "uploads" "versionId" "versioning" "versions" "website" "restore"]
         if { [regexp {^[^\?]+\?([A-Za-z]+).*$} $path -> resource] && [qc::in $subresources $resource] } {
             set canonicalized_resource "/${bucket}${path}"
         } else {
@@ -44,8 +45,23 @@ proc muppet::s3_auth_headers { args } {
         set canonicalized_resource "/"
     }
 
-    # TODO ignoring canonicalized_amz_headers
-    set canonicalized_amz_headers  ""
+    # amz_headers format {header value header value ...}
+    if { $amz_headers eq "" } {
+        set canonicalized_amz_headers  ""
+    } else {
+        foreach {header value} $amz_headers {
+            if { [info exists amz_header_array([qc::lower $header])] } {
+                lappend amz_header_array([qc::lower $header]) $value
+            } else {
+                set amz_header_array([qc::lower $header]) $value
+            }
+        }
+        set canonicalized_amz_headers  ""
+        foreach key [lsort [array names amz_header_array]] {
+            lappend canonicalized_amz_headers "${key}:[join $amz_header_array($key) ,]\u000A"
+        }
+        set canonicalized_amz_headers [join $canonicalized_amz_headers ""]
+    }
 
     # Contruct string for hmac signing
     set string_to_sign "$verb"
@@ -67,14 +83,34 @@ proc muppet::s3_get { bucket path } {
     return $result
 }
 
-proc muppet::s3_post { bucket path {data ""}} {
+proc muppet::s3_head { bucket path } {
+    #| Construct the http HEAD request to S3 including auth headers
+    set headers [s3_auth_headers HEAD $path $bucket] 
+    set result [qc::http_head -headers $headers [s3_url $bucket]$path]
+    return $result
+}
+
+proc muppet::s3_post { args } {
+    qc::args $args -amz_headers "" bucket path {data ""}
     #| Construct the http POST request to S3 including auth headers
-    set headers [s3_auth_headers POST $path $bucket] 
-    lappend headers Content-Type {}
     if { $data ne "" } {
-        set result [qc::http_post -headers $headers -data $data [s3_url $bucket]$path]
+        # Used for posting XML
+        set content_type {application/xml}
+        set content_md5 [muppet::s3_base64_md5 -data $data]
+        set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 POST $path $bucket] 
+        lappend headers Content-MD5 $content_md5
+        lappend headers Content-Type $content_type
+        set result [qc::http_post -valid_response_codes {100 200 202} -headers $headers -data $data [s3_url $bucket]$path]
     } else {
-        set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        set content_type {application/x-www-form-urlencoded}
+        if { $amz_headers ne "" } {
+            set headers [s3_auth_headers -amz_headers $amz_headers -content_type $content_type POST $path $bucket] 
+            lappend headers {*}$amz_headers
+            set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        } else {
+            set headers [s3_auth_headers -content_type $content_type POST $path $bucket] 
+            set result [qc::http_post -headers $headers [s3_url $bucket]$path]
+        }
     }
     return $result
 }
@@ -86,45 +122,71 @@ proc muppet::s3_delete { bucket path } {
     return $result
 }
 
-proc muppet::s3_save { bucket path filename } {
+proc muppet::s3_save { args } {
     #| Construct the http SAVE request to S3 including auth headers
+    qc::args $args -timeout 60 -- bucket path filename
     set headers [s3_auth_headers GET $path $bucket] 
-    return [qc::http_save -headers $headers [s3_url $bucket]$path $filename]
+    return [qc::http_save -timeout  $timeout -headers $headers [s3_url $bucket]$path $filename]
 }
 
 proc muppet::s3_put { args } {
     #| Construct the http PUT request to S3 including auth headers
-    # s3_put ?-header 0 ?-data ? ?-infile ? bucket path 
-    qc::args $args -header 0 -data ? -infile ? bucket path 
-    if { [info exists data]} {
-        set content_type "application/octet-stream"
-        set content_md5 [::base64::encode [::md5::md5 $data]]
-        set data_size [string length $data]
-    } elseif { [info exists infile]} {
+    # s3_put ?-header 0 ?-infile ? ?-s3_copy ?bucket path 
+    qc::args $args -nochecksum -header 0 -s3_copy ? -infile ? bucket path
+    if { [info exists infile]} {
         set content_type [qc::mime_type_guess $infile]
-        set content_md5 [::base64::encode [::md5::md5 -file $infile]]
+        set content_md5 [muppet::s3_base64_md5 -file $infile]
         set data_size [file size $infile]
-    } else {
-        error "muppet::s3_put: 1 of -data or -infile must be specified"
-    }
-    # content_md5 header allows AWS to return an error if the file received has a different md5
-    # Authentication value needs to use content_* values for hmac signing
-    set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
-    lappend headers Content-Length $data_size
-    lappend headers Content-MD5 $content_md5
-    lappend headers Content-Type $content_type
-    # Stop tclcurl from stending Transfer-Encoding header
-    lappend headers Transfer-Encoding {}
-    lappend headers Expect {}
-    # Have timeout values roughly in proportion to the filesize
-    # In this case allowing 100,000 bytes per second
-    set timeout [expr {$data_size/100000}]
-    if { [info exists data] } {
-        # data
-        return [qc::http_put -header $header -headers $headers -timeout $timeout -data $data [s3_url $bucket]$path]
-    } else {
-        # file
+        if { [info exists nochecksum] } {
+            # Dont send metadata for upload parts
+            set headers [s3_auth_headers -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
+        } else {
+            # content_md5 header allows AWS to return an error if the file received has a different md5
+            # Authentication value needs to use content_* values for hmac signing
+            set headers [s3_auth_headers -amz_headers [list "x-amz-meta-content-md5" $content_md5] -content_type $content_type -content_md5 $content_md5 PUT $path $bucket] 
+            lappend headers x-amz-meta-content-md5 $content_md5
+        }
+        lappend headers Content-Length $data_size
+        lappend headers Content-MD5 $content_md5
+        lappend headers Content-Type $content_type
+        # Stop tclcurl from stending Transfer-Encoding header
+        lappend headers Transfer-Encoding {}
+        lappend headers Expect {}
+        # Have timeout values roughly in proportion to the filesize
+        # In this case allowing 100,000 bytes per second
+        set timeout [expr {$data_size/100000}]
         return [qc::http_put -header $header -headers $headers -timeout $timeout -infile $infile [s3_url $bucket]$path]
+    } elseif { [info exists s3_copy] } {
+        # we're copying a S3 file - skip the data processing and send the PUT request with x-amz-copy-source header
+        set headers [s3_auth_headers -content_type {} -amz_headers [list "x-amz-copy-source" $s3_copy] PUT $path $bucket]
+        lappend headers x-amz-copy-source $s3_copy
+        lappend headers Content-Type {}
+        return [qc::http_put -header $header -headers $headers -data {} [s3_url $bucket]$path]
+    } else {
+        error "muppet::s3_put: 1 of -infile or -s3_copy must be specified"
+    }
+
+}
+
+proc muppet::s3_base64_md5 { args } {
+    qc::args $args -file ? -data ? -- 
+    #| Returns the base64 encoded binary md5 digest of a file or data
+    if { [info exists file] && [info exists data] } {
+        error "muppet::s3_base64_md5: specify only 1 of -file or -data"
+    }
+    if { [info exists data] } {
+        # Just use ::md5 since we don't process chunks of data large enough to cause problems
+        return [::base64::encode [::md5::md5 $data]]
+    } elseif {[info exists file]} {
+        # Will not use ::md5 if Trf isn't installed due to incorrect results & long runtimes for large files
+        if { [qc::in [package names] "Trf"] } {
+            return [::base64::encode [::md5::md5 -file $file]]
+        } else {
+            set openssl [exec which openssl] 
+            return [exec $openssl dgst -md5 -binary $file | $openssl enc -base64]
+        }
+    } else {
+        error "muppet::s3_base64_md5: 1 of -file or -data must be specified"
     }
 }
 
@@ -132,8 +194,14 @@ proc muppet::s3 { args } {
     #| Access Amazon S3 buckets via REST API
     # Usage: s3 subcommand {args}
     switch [lindex $args 0] {
+        md5 {
+            #| Just print the base64 md5 of a local file for reference
+            # usage: s3 md5 filename
+            lassign $args -> filename 
+            return [muppet::s3_base64_md5 -file $filename]
+        }
         ls {
-            # usage: s3 ls
+            # usage: s3 ls 
             set nodes [muppet::s3_xml_select [muppet::s3_get "" /] {/ns:ListAllMyBucketsResult/ns:Buckets/ns:Bucket}]
             return [qc::lapply muppet::s3_xml_node2dict $nodes]
         }
@@ -151,28 +219,83 @@ proc muppet::s3 { args } {
 	    return [qc::lapply muppet::s3_xml_node2dict [muppet::s3_xml_select $xmlDoc {/ns:ListBucketResult/ns:Contents}]]
         }
         get {
-            # usage: s3 get bucket remote_path local_path
-            muppet::s3_save {*}[lrange $args 1 end]
+            # usage: s3 get bucket remote_filename local_filename
+            if { [llength $args] < 3 || [llength $args] > 4 } {
+                error "Wrong number of arguments. Usage: muppet::s3 get mybucket remote_filename {local_filename}"
+            } elseif { [llength $args] == 3 } {
+                # No local filename, assume same as remote_filename in current directory
+                lassign $args -> bucket remote_filename 
+                set local_filename "./[file tail $remote_filename]"
+            } else {
+                lassign $args -> bucket remote_filename local_filename
+            }
+            if { [file exists $local_filename] } {
+                error "File $local_filename already exists."
+            }
+            set head_dict [muppet::s3 head $bucket $remote_filename]
+            if { [dict exists $head_dict x-amz-meta-content-md5] } {
+                set base64_md5 [dict get $head_dict x-amz-meta-content-md5]
+            }
+            set file_size [dict get [muppet::s3 head $bucket $remote_filename] Content-Length]
+            # set timeout - allow 1Mb/s
+            set timeout_secs [expr {max( (${file_size}*8)/1000000 , 60)} ]
+            puts "Timeout set at $timeout_secs seconds"
+            muppet::s3_save -timeout $timeout_secs $bucket $remote_filename $local_filename
+            if { [info exists base64_md5] } {
+                # Check the base64 md5 of the downloaded file matches what we put in the x-amz-meta-content-md5 metadata on upload
+                if { [set local_md5 [muppet::s3_base64_md5 -file $local_filename]] ne $base64_md5 } {
+                    error "muppet::s3 get: md5 of downloaded file $local_filename ($local_md5) does not match x-amz-meta-content-md5 ($base64_md5)."
+                }
+            }
+        }
+        head {
+            # usage: s3 head bucket remote_path
+            muppet::s3_head {*}[lrange $args 1 end]
+        }       
+        copy {
+            # usage: s3 copy bucket bucket/remote_filename_to_copy remote_filename_copy
+            lassign $args -> bucket remote_filename remote_filename_copy
+            muppet::s3_put -s3_copy $remote_filename $bucket $remote_filename_copy
         }
         put {
-            # usage: s3 put bucket local_path remote_path
+            # usage: s3 put bucket local_path {remote_filename}
             # 5GB limit
-            lassign $args -> bucket local_path remote_path
-            if { [file size $local_path] > [expr {1024*1024*5}]} { 
-                # Use multipart upload
-                muppet::s3 upload $bucket $local_path $remote_path
+            if { [llength $args] < 3 || [llength $args] > 4 } {
+                error "Wrong number of arguments. Usage: muppet::s3 put mybucket local_filename {remote_filename}"
+            } elseif { [llength $args] == 3 } {
+                # No remote filename, assume same as local_filename
+                lassign $args -> bucket local_filename 
+                set remote_filename "/[file tail $local_filename]"
             } else {
-                muppet::s3_put -infile $local_path $bucket $remote_path
+                lassign $args -> bucket local_filename remote_filename
             }
+
+            if { [file size $local_filename] > [expr {1024*1024*5}]} { 
+                # Use multipart upload
+                muppet::s3 upload $bucket $local_filename $remote_filename
+            } else {
+                muppet::s3_put -infile $local_filename $bucket $remote_filename
+            }
+        }
+        restore {
+            # usage: s3 restore bucket remote_path days
+            # Requests restore of object from Glacier storage to S3 storage for $days days
+            lassign $args -> bucket remote_path Days
+            if { [llength $args] != 4  } {
+                error "Invalid number of arguments. Usage: muppet s3 restore bucket remote_path days"
+            }
+            set data "<RestoreRequest>[qc::xml_from Days]</RestoreRequest>"
+            muppet::s3_post $bucket ${remote_path}?restore $data
         }
         upload {
             switch [lindex $args 1] {
                 init {
-                    # s3 upload init bucket remote_path
-                    lassign $args -> -> bucket remote_path
-                    set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post $bucket ${remote_path}?uploads] {/ns:InitiateMultipartUploadResult}]]
+                    # s3 upload init bucket local_file remote_file
+                    lassign $args -> -> bucket local_file remote_file
+                    set content_md5 [muppet::s3_base64_md5 -file $local_file]
+                    set upload_dict [muppet::s3_xml_node2dict [muppet::s3_xml_select [muppet::s3_post -amz_headers [list x-amz-meta-content-md5 $content_md5] $bucket ${remote_file}?uploads] {/ns:InitiateMultipartUploadResult}]]
                     set upload_id [dict get $upload_dict UploadId]
-                    puts "Upload init for $remote_path to $bucket."
+                    puts "Upload init for $remote_file to $bucket."
                     puts "Upload_id: $upload_id"
                     return $upload_id
                 }
@@ -224,9 +347,9 @@ proc muppet::s3 { args } {
                     # Timeout - allow 10240 B/s
                     global s3_timeout
                     set s3_timeout($upload_id) false
-                    set timeout_period [expr {($file_size/10240)*1000}]
-                    puts "Timeout set as $timeout_period ms"
-                    set id [after $timeout_period [list set s3_timeout($upload_id) true]]
+                    set timeout_ms [expr {($file_size/10240)*1000}]
+                    puts "Timeout set as $timeout_ms ms"
+                    set id [after $timeout_ms [list set s3_timeout($upload_id) true]]
                     set num_parts [expr {round(ceil($file_size/double($part_size)))}]
                     set fh [open $local_path r]
                     fconfigure $fh -translation binary
@@ -244,7 +367,7 @@ proc muppet::s3 { args } {
                         set attempt 1
                         while { !$s3_timeout($upload_id) && !$success } {
                             try {
-                                set response [muppet::s3_put -header 1 -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
+                                set response [muppet::s3_put -header 1 -nochecksum -infile $tempfile $bucket ${remote_path}?partNumber=${part_index}&uploadId=$upload_id]
                                 set success true
                             } {
                                 puts stderr "Failed - retrying part $part_index of ${num_parts}... "
@@ -275,10 +398,10 @@ proc muppet::s3 { args } {
                     # Top level multipart upload
                     # usage: s3 upload bucket local_path remote_path
                     # TODO could be extended to retry upload part failures
-                    lassign $args -> bucket local_path remote_path 
-                    set upload_id [muppet::s3 upload init $bucket $remote_path]
-                    set etag_dict [muppet::s3 upload send $bucket $local_path $remote_path $upload_id]
-                    muppet::s3 upload complete $bucket $remote_path $upload_id $etag_dict
+                    lassign $args -> bucket local_file remote_file 
+                    set upload_id [muppet::s3 upload init $bucket $local_file $remote_file]
+                    set etag_dict [muppet::s3 upload send $bucket $local_file $remote_file $upload_id]
+                    muppet::s3 upload complete $bucket $remote_file $upload_id $etag_dict
                 }
             }
         }
@@ -287,7 +410,7 @@ proc muppet::s3 { args } {
             muppet::s3_delete {*}[lrange $args 1 end]
         }
         default {
-            error "Unknown s3 command. Must be one of ls, lsbucket, get, put or delete."
+            error "Unknown s3 command."
         }
     }
 }

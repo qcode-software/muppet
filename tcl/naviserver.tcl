@@ -6,13 +6,20 @@ namespace eval muppet {
 
 proc muppet::naviserver_install {} {
     file_write /etc/default/naviserver [muppet::naviserver_defaults]
-    sh update-rc.d -f naviserver remove
     user_add nsd
     file mkdir /var/log/naviserver/
     file attributes /var/log/naviserver/ -owner nsd -group nsd -permissions 0770
     file mkdir /var/run/naviserver/
     file attributes /var/run/naviserver/ -owner nsd -group nsd -permissions 0770
-    install naviserver naviserver-core naviserver-nsdbpg daemontools daemontools-run
+    install naviserver naviserver-core naviserver-nsdbpg
+    sh update-rc.d -f naviserver remove
+}
+
+proc muppet::naviserver_upgrade {} {
+    #| Upgrades naviserver to latest version while not disturbing a daemontools config
+    file_write /etc/default/naviserver [muppet::naviserver_defaults]
+    sh apt-get install -y naviserver naviserver-core naviserver-nsdbpg 
+    sh update-rc.d -f naviserver remove
 }
 
 proc muppet::naviserver_daemontools_run { service } {
