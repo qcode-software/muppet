@@ -15,7 +15,7 @@ proc muppet::postgresql_install { args } {
 
 proc muppet::postgresql_db_exists {db_name} {
     #| Check if db already exists.
-    set result [sh sudo -u postgres -s psql -c "select datname from pg_database;"]
+    set result [sh sudo -u [muppet::postgresql_system_user] -s psql -c "select datname from pg_database;" postgres]
     return [regexp -line "(^| *)${db_name}\$" $result]
 }
 
@@ -37,15 +37,23 @@ proc muppet::postgresql_db_create { args } {
     }
 }
 
+proc muppet::postgresql_system_user {  } {
+    # Use olders postgres process owner as DB system user
+    set pid [exec pgrep -o postgres]
+    set ps [exec which ps]
+    regexp -line "^(\\S+)\\s+${pid}\\s+.+\$" [exec $ps u $pid] -> owner
+    return $owner
+}
+
 proc muppet::postgresql_table_exists {db_name schema table} {
     #| Check if a table already exists.
-    set result [sh sudo -u postgres -s psql -d $db_name -c [db_qry_parse "select tablename from pg_tables where tablename=:table and schemaname=:schema;"]]
+    set result [sh sudo -u [muppet::postgresql_system_user] -s psql -d $db_name -c [db_qry_parse "select tablename from pg_tables where tablename=:table and schemaname=:schema;"] postgres]
     return [regexp -line "(^| *)${table}\$" $result]
 }
 
 proc muppet::postgresql_user_exists {user_name} {
     #| Check if pg user already exists.
-    set result [sh sudo -u postgres -s psql -c "select rolname from pg_roles;"]
+    set result [sh sudo -u [muppet::postgresql_system_user] -s psql -c "select rolname from pg_roles;" postgres]
     return [regexp -line "(^| *)${user_name}\$" $result]
 }
 
@@ -97,7 +105,7 @@ proc muppet::postgresql_user_password {user {password ""}} {
 	    return
 	} 
     }
-    sh sudo -u postgres -s psql -c "ALTER USER \"$user\" WITH PASSWORD '[string map {' ''} $password]'"
+    sh sudo -u [muppet::postgresql_system_user] -s psql -c "ALTER USER \"$user\" WITH PASSWORD '[string map {' ''} $password]' postgres"
 }
 
 proc muppet::postgresql_psqlrc_install { args } {
