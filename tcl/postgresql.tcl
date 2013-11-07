@@ -105,7 +105,7 @@ proc muppet::postgresql_user_password {user {password ""}} {
 	    return
 	} 
     }
-    sh sudo -u [muppet::postgresql_system_user] -s psql -c "ALTER USER \"$user\" WITH PASSWORD '[string map {' ''} $password]' postgres"
+    sh sudo -u [muppet::postgresql_system_user] -s psql -c "ALTER USER \"$user\" WITH PASSWORD '[string map {' ''} $password]';" postgres
 }
 
 proc muppet::postgresql_psqlrc_install { args } {
