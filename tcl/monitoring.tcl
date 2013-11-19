@@ -15,7 +15,7 @@ proc muppet::disk_space_check { args } {
             set text "[cast_timestamp now] ALERT: $filesystem is ${percent_used}% full."
             # Email alert
             qc::email_send \
-                to [qc::param email_support] \
+                to [qc::param_get email_support] \
                 from "muppet@[qc::my fqdn]" \
                 subject "FILESYSTEM SPACE ALERT: [qc::my hostname] alert for $filesystem" \
                 text $text

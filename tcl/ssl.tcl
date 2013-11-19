@@ -16,7 +16,7 @@ proc muppet::ssl_cert {key} {
     set key_filename [file_temp $key]
     set cert_filename [fileutil::tempfile]
     if { [qc::param_exists ssl_default_cnf] } {
-        set config_filename [file_temp [qc::param ssl_default_cnf]]
+        set config_filename [file_temp [qc::param_get ssl_default_cnf]]
         sh openssl req -config $config_filename -new -x509 -key $key_filename -days 365 -out $cert_filename
         file delete $config_filename
     } else {

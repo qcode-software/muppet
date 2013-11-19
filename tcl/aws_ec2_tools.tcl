@@ -101,8 +101,8 @@ proc muppet::aws_credentials_set {} {
     # variable aws_testing [list access_key "XXXXXXXXXXXXXX" secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
     # variable aws_qcode [list access_key "XXXXXXXXXXXXXX" secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
     
-    set access_key [dict get [qc::param [qc::param aws_default]] access_key]
-    set secret_access_key [dict get [qc::param [qc::param aws_default]] secret_access_key]
+    set access_key [dict get [qc::param_get [qc::param_get aws_default]] access_key]
+    set secret_access_key [dict get [qc::param_get [qc::param_get aws_default]] secret_access_key]
 
     # Start with no credentials
     if { [regexp -linestop -lineanchor {^(export\sAWS_ACCESS_KEY=\S+)$} [muppet::cat /root/.profile] -> aws_access_key_line] } {
@@ -119,7 +119,7 @@ export AWS_SECRET_KEY=$secret_access_key"
     set env(AWS_ACCESS_KEY) $access_key
     set env(AWS_SECRET_KEY) $secret_access_key
 
-    puts "Source /root/.profile to update aws environment to aws [qc::param aws_default]"
+    puts "Source /root/.profile to update aws environment to aws [qc::param_get aws_default]"
 }
 
 proc muppet::aws_env {} {
