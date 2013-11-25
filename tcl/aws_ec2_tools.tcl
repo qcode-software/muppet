@@ -36,7 +36,7 @@ proc muppet::aws_ec2_tools_install {} {
     set env(EC2_URL) "https://ec2.eu-west-1.amazonaws.com"
 
     # Set aws credentials
-    muppet::aws_credentials_set
+    muppet::aws_ec2_tools_credentials_set
 
 }
 
@@ -94,7 +94,7 @@ proc muppet::aws_endpoint_change {} {
     }
 }
 
-proc muppet::aws_credentials_set {} {
+proc muppet::aws_ec2_tools_credentials_set {} {
     #| Sets aws credentials referred to by the aws_default
     # eg.
     # variable aws_default aws_testing
