@@ -9,7 +9,7 @@ proc muppet::aws_cli_tools_install {} {
     install python
     cd /tmp
     file_download https://s3.amazonaws.com/aws-cli/awscli-bundle.zip
-    set unzip [exec which unzip]
+    set unzip [qc::which unzip]
     sh $unzip /tmp/awscli-bundle.zip
     sh /tmp/awscli-bundle/install -i /usr/local/aws -b /usr/local/bin/aws
     file delete -force /tmp/awscli-bundle
@@ -29,7 +29,7 @@ proc muppet::aws_cli_config_update {} {
 
     set config "
 \[default\]
-region=eu-west-1
+region=[qc::param_get aws_region]
 output=text
 aws_access_key_id=$access_key
 aws_secret_access_key=$secret_access_key
