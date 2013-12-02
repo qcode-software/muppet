@@ -23,25 +23,11 @@ proc muppet::aws_ec2_tools_install {} {
     file delete ec2-api-tools.zip
     muppet::file_link "/usr/local/bin/ec2-api-tools" "/usr/local/bin/$ec2_tools_dir_name"
 
-    # Make the tools accessable by the root user
-    # TODO finish regexp
-    if { ![muppet::file_contains_line /root/.profile "export EC2_HOME=/usr/local/bin/ec2-api-tools"] } {
-        puts "Updating /root/.profile..."
-        muppet::file_append /root/.profile [muppet::aws_env]
-    }
-    # Also dynamically set the ENV variables
-    set env(EC2_HOME) "/usr/local/bin/ec2-api-tools"
-    set env(PATH) {$PATH:$EC2_HOME/bin}
-    set env(JAVA_HOME) "/usr"
-    set env(EC2_URL) "https://ec2.eu-west-1.amazonaws.com"
-
-    # Set aws credentials
-    muppet::aws_ec2_tools_credentials_set
-
 }
 
 proc muppet::aws_delete_snapshots_older_than { days } {
     #| Delete all snapshots for this instance which are older than $days days
+    muppet::aws_ec2_tools_env_set
     # List all volumes for this instance (often only 1)
     set volumes [exec ec2-describe-volumes --filter attachment.instance-id=[qc::my instance_id]]
     foreach {match volume_id filesystem} [regexp -linestop -lineanchor -all -inline "^ATTACHMENT\\s+(\\S+)\\s+\\S+\\s+(\\S+)\\s+.+\$" $volumes] { 
@@ -58,6 +44,7 @@ proc muppet::aws_delete_snapshots_older_than { days } {
 proc muppet::aws_snapshot_self {} {
     #| Creates snapshots of all volumes attached to the local EC2 instance
     # TODO uses sync rather than xfs_freeze for now
+    muppet::aws_ec2_tools_env_set
     set volumes [exec ec2-describe-volumes]
     set instance_id [qc::my instance_id]
     foreach {match volume_id filesystem} [regexp -linestop -lineanchor -all -inline "^ATTACHMENT\\s+(\\S+)\\s+$instance_id\\s+(\\S+)\\s+.+\$" $volumes] { 
@@ -67,67 +54,33 @@ proc muppet::aws_snapshot_self {} {
     }
 }
 
-proc muppet::aws_endpoint_change {} {
-    set regions [exec ec2-describe-regions]
-    puts "Enter the number of the endpoint you want:"
-    set count 1
-    foreach region [split $regions \n] {
-        lassign $region -> name endpoint
-        set endpoints($count) $endpoint
-        puts "$count. $endpoint \n"
-        incr count
-    }
-    gets stdin input
-    if { ![info exists endpoints($input)] } {
-        puts "Invalid selection."
-    } {
-        puts "Endpoint $endpoints($input) selected"
-        set env(EC2_URL) "https://$endpoints($input)"
-
-        # Get current value of EC2_URL in .profile
-        regexp -linestop -lineanchor {^(export\sEC2_URL=\S+)$} [muppet::cat /root/.profile] -> aws_url
-        
-        # Change it to the new value
-        muppet::file_write /root/.profile [muppet::file_minus_line /root/.profile $aws_url]
-        muppet::file_append /root/.profile "export EC2_URL=https://$endpoints($input)"
-        puts "Source /root/.profile to update environment"
-    }
-}
-
-proc muppet::aws_ec2_tools_credentials_set {} {
-    #| Sets aws credentials referred to by the aws_default
-    # eg.
-    # variable aws_default aws_testing
-    # variable aws_testing [list access_key "XXXXXXXXXXXXXX" secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
-    # variable aws_qcode [list access_key "XXXXXXXXXXXXXX" secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"]
+proc muppet::aws_ec2_tools_env_set { } {
+    #| Sets up aws credentials for old ec2 cli tools
+    # qc::param_set aws default account1
+    # qc::param_set aws account1 region "eu-west-1"
+    # qc::param_set aws account1 access_key "xxxxxxxxxxxxxxxx"
+    # qc::param_set aws account1 secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    #
+    # qc::param_set aws account2 region "eu-west-1"
+    # qc::param_set aws account2 access_key "xxxxxxxxxxxxxxxx"
+    # qc::param_set aws account2 secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    #
+    # qc::param_set aws account3 region "eu-west-1"
+    # qc::param_set aws account3 access_key "xxxxxxxxxxxxxxxx"
+    # qc::param_set aws account3 secret_access_key "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    #
     
-    set access_key [dict get [qc::param_get [qc::param_get aws_default]] access_key]
-    set secret_access_key [dict get [qc::param_get [qc::param_get aws_default]] secret_access_key]
+    # AWS account to default to
+    set account [qc::param_get aws default]
 
-    # Start with no credentials
-    if { [regexp -linestop -lineanchor {^(export\sAWS_ACCESS_KEY=\S+)$} [muppet::cat /root/.profile] -> aws_access_key_line] } {
-        muppet::file_write /root/.profile [muppet::file_minus_line /root/.profile $aws_access_key_line]
-    }
-    if { [regexp -linestop -lineanchor {^(export\sAWS_SECRET_KEY=\S+)$} [muppet::cat /root/.profile] -> aws_secret_key_line] } {
-        muppet::file_write /root/.profile [muppet::file_minus_line /root/.profile $aws_secret_key_line]
-    }
-
-    # Update .profile
-    muppet::file_append /root/.profile "export AWS_ACCESS_KEY=$access_key
-export AWS_SECRET_KEY=$secret_access_key"
     # Update current environment
-    set env(AWS_ACCESS_KEY) $access_key
-    set env(AWS_SECRET_KEY) $secret_access_key
+    set ::env(AWS_ACCESS_KEY) [qc::param_get aws $account access_key]
+    set ::env(AWS_SECRET_KEY) [qc::param_get aws $account secret_access_key]
+    set ::env(EC2_HOME) /usr/local/bin/ec2-api-tools
+    set ::env(PATH) ${::env(PATH)}:${::env(EC2_HOME)}/bin
+    set ::env(JAVA_HOME) /usr
+    set ::env(EC2_URL) https://ec2.[qc::param_get aws $account region].amazonaws.com
 
-    puts "Source /root/.profile to update aws environment to aws [qc::param_get aws_default]"
 }
+ 
 
-proc muppet::aws_env {} {
-    # TODO endpoint defaults to Ireland for now - will need a way to change this easily
-    return {
-export EC2_HOME=/usr/local/bin/ec2-api-tools
-export PATH=$PATH:$EC2_HOME/bin
-export JAVA_HOME=/usr
-export EC2_URL=https://ec2.eu-west-1.amazonaws.com
-    }
-}
