@@ -12,19 +12,44 @@ proc muppet::aws { args } {
     #
     # New CLI example
     # muppet aws elb describe-load-balancers
+    #
+    # Required variables are:
+    # ::env(AWS_ACCESS_KEY_ID)
+    # ::env(AWS_SECRET_ACCESS_KEY)
+    # ::env(AWS_DEFAULT_REGION)
+    #
+    # Either set environment vars directly, or call qc::aws_credentials_set & qc::aws_region_set 
+    # in the muppet rc script ~/.muppet/muppet.tcl
+    # eg.
+    # qc::aws_credentials_set [qc::param_get aws my_access_key] [qc::param_get my_secret_key]
+    # qc::aws_region_set eu-west-1
+    #
     if { [string match "ec2-*" $args] } {
-        # Old EC2 CLI command
-        muppet::aws_ec2_tools_env_set
+        # Old EC2 CLI 
+        #| Sets required AWS environment variables for these tools
+
+        # Update credentials environment - old ec2 tools use different naming
+        set ::env(AWS_ACCESS_KEY) $::env(AWS_ACCESS_KEY_ID) 
+        set ::env(AWS_SECRET_KEY) $::env(AWS_SECRET_ACCESS_KEY) 
+
+        # Update environment
+        set ::env(EC2_HOME) /usr/local/bin/ec2-api-tools
+        set ::env(PATH) ${::env(PATH)}:${::env(EC2_HOME)}/bin
+        set ::env(JAVA_HOME) /usr
+        set ::env(EC2_URL) https://ec2.${::env(AWS_DEFAULT_REGION)}.amazonaws.com
+
+        # Execute command
         return [exec {*}$args]
+
     } else {
         # New AWS unified CLI command
-        muppet:::aws_cli_tools_env_set 
+        set ::env(AWS_DEFAULT_OUTPUT) "text"
         return [exec aws {*}$args]
     }
 }
 
 proc muppet::aws_cli_tools_install {} {
-    #| Install the Amazon Wed Services unified command line interface tool.
+    #| Install the Amazon Web Services unified command line interface tool.
     install python
     cd /tmp
     file_download https://s3.amazonaws.com/aws-cli/awscli-bundle.zip
@@ -34,15 +59,3 @@ proc muppet::aws_cli_tools_install {} {
     file delete -force /tmp/awscli-bundle
     file delete /tmp/awscli-bundle.zip
 }
-
-proc muppet:::aws_cli_tools_env_set {} {
-    #| Sets aws credentials referred to by the aws_default param
-   
-    set account [qc::param_get aws default]
-
-    set ::env(AWS_DEFAULT_REGION) [qc::param_get aws $account region]
-    set ::env(AWS_ACCESS_KEY_ID) [qc::param_get aws $account access_key]
-    set ::env(AWS_SECRET_ACCESS_KEY) [qc::param_get aws $account secret_access_key]
-    set ::env(AWS_DEFAULT_OUTPUT) "text"
-}
-
