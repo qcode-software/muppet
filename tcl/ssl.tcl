@@ -1,4 +1,4 @@
-package provide muppet 1.1.0
+package provide muppet 1.2.0
 package require fileutil
 package require qcode
 namespace eval muppet {
