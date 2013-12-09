@@ -11,7 +11,7 @@ REMOTEDIR=debian.qcode.co.uk
 
 all: test package upload clean
 package: 
-	 checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-2.0,iproute,tdom" make install
+	 checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-2.0,iproute,tdom" --replaces none --conflicts none make install
 
 test: 
 	./pkg_mkIndex tcl
@@ -23,8 +23,8 @@ install:
 	rm -f /usr/lib/tcltk/$(NAME)$(VERSION)/*
 	cp tcl/*.tcl /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp LICENSE /usr/lib/tcltk/$(NAME)$(VERSION)/
-	cp bin/muppet /usr/local/bin/muppet
-	cp muppet.tcl.conf /etc/muppet.tcl.sample
+	cp bin/muppet /usr/local/bin/muppet-$(VERSION)
+	cp muppet.tcl.conf /etc/muppet-$(VERSION).tcl.sample
 
 upload:
 	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER)@$(REMOTEHOST):$(REMOTEDIR)/debs"	
