@@ -27,6 +27,8 @@ proc muppet::naviserver_daemontools_run { service } {
     return [subst -nocommands {#!/bin/sh
 export LANG=en_GB.UTF-8
 export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
+RUNDIR=/var/run/naviserver
+[ ! -d $RUNDIR ] && mkdir -p -m 755 $RUNDIR && chown nsd:nsd $RUNDIR
 NSD_EXE=/usr/lib/naviserver/bin/nsd
 exec \$NSD_EXE -u nsd -g nsd -i -t /home/nsd/${service}/etc/nsd.tcl 2>&1
 }]
