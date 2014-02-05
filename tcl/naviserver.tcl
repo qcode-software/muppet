@@ -1,4 +1,4 @@
-package provide muppet 1.2.1
+package provide muppet 1.2.2
 package require qcode
 namespace eval muppet {
     namespace export *
@@ -24,14 +24,15 @@ proc muppet::naviserver_upgrade {} {
 
 proc muppet::naviserver_daemontools_run { service } {
     #| Naviserver start script 
-    return [subst -nocommands {#!/bin/sh
+    set result {#!/bin/sh
 export LANG=en_GB.UTF-8
 export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
 RUNDIR=/var/run/naviserver
 [ ! -d $RUNDIR ] && mkdir -p -m 755 $RUNDIR && chown nsd:nsd $RUNDIR
 NSD_EXE=/usr/lib/naviserver/bin/nsd
-exec \$NSD_EXE -u nsd -g nsd -i -t /home/nsd/${service}/etc/nsd.tcl 2>&1
-}]
+exec $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
+}
+    return [string map [list \$service $service] $result]
 }
 
 proc muppet::naviserver_service {service} {
