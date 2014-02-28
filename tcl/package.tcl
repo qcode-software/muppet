@@ -74,7 +74,7 @@ proc muppet::locale_set { locale charset } {
             lappend locale_gen "# $supported_locale"
         }
     }
-    muppet::file_write "/etc/locale.gen" [join $locale_gen \n]
+    file_write "/etc/locale.gen" [join $locale_gen \n]
 
     # Generate selected locale
     sh locale-gen
