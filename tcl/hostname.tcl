@@ -13,9 +13,9 @@ proc muppet::hostname_update { hostname domain } {
     lappend hosts "127.0.0.1	localhost localhost.localdomain"
     lappend hosts "127.0.1.1	${hostname}.${domain} $hostname"
     lappend hosts ""
-    muppet::file_write /etc/hosts [join $hosts \n]
+    file_write /etc/hosts [join $hosts \n]
     # /etc/hostname
-    muppet::file_write /etc/hostname "$hostname\n"
+    file_write /etc/hostname "$hostname\n"
     # run hostname command to update hostname for this session
     sh hostname $hostname
 
