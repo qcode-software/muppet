@@ -50,7 +50,7 @@ proc muppet::aws { args } {
 
 proc muppet::aws_cli_tools_install {} {
     #| Install the Amazon Web Services unified command line interface tool.
-    install python
+    install python unzip
     cd /tmp
     file_download https://s3.amazonaws.com/aws-cli/awscli-bundle.zip
     set unzip [qc::which unzip]

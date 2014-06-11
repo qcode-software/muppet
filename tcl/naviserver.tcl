@@ -22,22 +22,32 @@ proc muppet::naviserver_upgrade {} {
     sh update-rc.d -f naviserver remove
 }
 
-proc muppet::naviserver_daemontools_run { service } {
-    #| Naviserver start script 
+proc muppet::naviserver_daemontools_run { args } {
+    #| Naviserver start script
+    qc::args $args -proxy "" -- service 
     set result {#!/bin/sh
 export LANG=en_GB.UTF-8
 export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
+$proxy_vars
 RUNDIR=/var/run/naviserver
 [ ! -d $RUNDIR ] && mkdir -p -m 755 $RUNDIR && chown nsd:nsd $RUNDIR
 NSD_EXE=/usr/lib/naviserver/bin/nsd
 exec $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
 }
-    return [string map [list \$service $service] $result]
+    set proxy_vars [list]
+    if { $proxy ne "" } {
+        lappend proxy_vars "export http_proxy=$proxy"
+        lappend proxy_vars "export https_proxy=$proxy"
+    }
+    set result [string map [list \$service $service] $result]
+    set result [string map [list \$proxy_vars [join $proxy_vars \n]] $result]
+    return $result
 }
 
-proc muppet::naviserver_service {service} {
+proc muppet::naviserver_service { args } {
+    qc::args $args -proxy "" -- service
     file mkdir /etc/nsd/$service
-    file_write /etc/nsd/$service/run [naviserver_daemontools_run $service] 0700
+    file_write /etc/nsd/$service/run [naviserver_daemontools_run -proxy $proxy $service] 0700
     file delete /etc/service/$service
     file_link /etc/service/$service /etc/nsd/$service
 }
