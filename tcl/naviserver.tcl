@@ -32,8 +32,7 @@ RUNDIR=/var/run/naviserver
 NSD_EXE=/usr/lib/naviserver/bin/nsd
 exec $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
 }
-    set result [string map [list \$service $service] $result]
-    return $result
+    return [string map [list \$service $service] $result]
 }
 
 proc muppet::naviserver_service { service } {
