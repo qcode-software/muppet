@@ -23,7 +23,7 @@ proc muppet::naviserver_upgrade {} {
 }
 
 proc muppet::naviserver_daemontools_run { service } {
-    #| Naviserver start script 
+    #| Naviserver start script
     set result {#!/bin/sh
 export LANG=en_GB.UTF-8
 export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
@@ -35,7 +35,7 @@ exec $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
     return [string map [list \$service $service] $result]
 }
 
-proc muppet::naviserver_service {service} {
+proc muppet::naviserver_service { service } {
     file mkdir /etc/nsd/$service
     file_write /etc/nsd/$service/run [naviserver_daemontools_run $service] 0700
     file delete /etc/service/$service
