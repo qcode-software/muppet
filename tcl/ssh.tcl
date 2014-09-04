@@ -163,7 +163,10 @@ proc muppet::ssh_private_repo { name user host } {
     muppet::ssh_user_config set root $name HostName $host User $user IdentityFile ~/.ssh/$filename
     
     # Add to sources.list
-    set repo_source "deb ssh://${name}:/home/${user}/ squeeze main"
+    # What distribution is this? squeeze or wheezy?
+    #
+    set code_name [exec lsb_release -cs]
+    set repo_source "deb ssh://${name}:/home/${user}/ $code_name main"
     if { ![file_contains_line /etc/apt/sources.list $repo_source] } {
         file_append /etc/apt/sources.list $repo_source
     }
