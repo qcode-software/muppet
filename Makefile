@@ -1,5 +1,5 @@
 NAME=muppet
-VERSION=1.2.6
+VERSION=1.2.7
 $(shell ./set-version-number.tcl ${NAME} ${VERSION})
 RELEASE=0
 MAINTAINER=hackers@qcode.co.uk

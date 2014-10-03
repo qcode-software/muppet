@@ -1,4 +1,4 @@
-package provide muppet 1.2.6
+package provide muppet 1.2.7
 package require qcode
 namespace eval muppet {
     namespace export *
