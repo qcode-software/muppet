@@ -59,3 +59,40 @@ proc muppet::aws_cli_tools_install {} {
     file delete -force /tmp/awscli-bundle
     file delete /tmp/awscli-bundle.zip
 }
+
+proc muppet::aws_describe_instances {args} {
+    #| Return ldict of info about each instance matching crtieria.
+    # "aws_instances -state running -security_group MLA_DEV_SG"
+    # This will match instances in state running AND with security_group MLA_DEV_SG
+    args $args -state "" -states {} -security_group ""  -security_groups {}
+
+    # Filters
+    set filters {}
+    if { $state ne "" } {
+        lappend states $state
+    }
+    if { [llength $states] > 0 } {
+        lappend filters Name=instance-state-name,Values=[join $states ,]
+    }
+    if { $security_group ne "" } {
+        lappend security_groups $security_group
+    }
+    if { [llength $security_groups] > 0 } {
+        lappend filters Name=instance.group-name,Values=[join $security_groups ,]
+    }
+    
+    set args {}
+    if { [llength $filters] > 0 } {
+        lappend args --filters {*}$filters
+    }
+    set json [muppet::aws ec2 describe-instances --output json {*}$args]
+    set result [::json::json2dict $json]
+    
+    set instances {}
+    foreach reservation [dict get $result Reservations] {
+        foreach instance [dict get $reservation Instances] {
+            lappend instances $instance
+        }
+    }
+    return $instances
+}
