@@ -1,7 +1,4 @@
-package provide muppet 1.2.7
-package require qcode
-namespace eval muppet {}
-
+package provide muppet 1.3.0
 proc muppet::apache_vhost.conf { listen port docroot } {
     return [subst -nocommands {<VirtualHost ${listen}:${port}>
         ServerAdmin webmaster@localhost

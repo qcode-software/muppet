@@ -1,4 +1,4 @@
-package provide muppet 1.2.7
+package provide muppet 1.3.0
 namespace eval muppet {
     namespace export *
 } 
