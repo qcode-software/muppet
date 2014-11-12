@@ -1,4 +1,9 @@
 package provide muppet 1.3.0
+package require qcode
+namespace eval muppet {
+    namespace export *
+} 
+
 proc muppet::aws { args } {
     #| Execute a AWS command in the correct environment
     #
