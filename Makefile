@@ -33,6 +33,7 @@ upload:
 
 clean:
 	rm $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
+	rm postinstall-pak
 
 uninstall:
 	rm -r /usr/lib/tcltk/$(NAME)$(VERSION)
