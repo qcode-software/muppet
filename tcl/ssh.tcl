@@ -63,18 +63,6 @@ proc muppet::ssh_user_config {method user host args} {
     file_write $config_file [muppet::ssh_user_config_transform $config $method $host {*}$args]
 }
 
-doc muppet::ssh_user_config {
-    Usage {set|update|delete user host ?config_name value? ?config_name value?}
-    Example {
-        % ssh_user_config set root muppet_repo HostName debian.qcode.co.uk User muppet IdentityFile ~/.ssh/id_muppet_rsa
-        # will add the following to ~/.ssh/config in root's home dir.
-        Host muppet_repo
-        Hostname debian.qcode.co.uk
-        User muppet
-        IdentityFile ~/.ssh/id_muppet_rsa
-    }
-}
-
 proc muppet::ssh_user_config_transform {config method host args} {
     #| Transform an ssh config string
     # method one of set | update | delete
@@ -169,24 +157,5 @@ proc muppet::ssh_private_repo { name user host } {
     set repo_source "deb ssh://${name}:/home/${user}/ $code_name main"
     if { ![file_contains_line /etc/apt/sources.list $repo_source] } {
         file_append /etc/apt/sources.list $repo_source
-    }
-}
-
-doc muppet::ssh_private_repo {
-    Examples {
-        % muppet ssh_repo_access private john debian.domain.co.uk
-        Will look for an encrypted private key at a remote location and save it to /root/.ssh/
-        The encrypted key will be decypted on disk requiring the encryption key to be entered by the user.
-        An ssh config will be added as follows to use the saved private key to access this repo:
-        
-        Host private
-        HostName debian.domain.co.uk
-        User john
-        IdentityFile ~/.ssh/john.key
-        
-        and a sources.list entry will be added
-        deb ssh://private:/home/john/ squeeze main
-
-        Assume that this key has already been authorized access to john@debian.domain.co.uk
     }
 }
