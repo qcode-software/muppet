@@ -1,4 +1,4 @@
-package provide muppet 1.3.0
+package provide muppet 1.3.1
 package require qcode
 
 # Load configuration file
