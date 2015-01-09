@@ -1,5 +1,4 @@
-package provide muppet 1.3.1
-package require qcode
+package require qcode 6
 
 # Load configuration file
 if { [info exists env(HOME)] && [file exists $env(HOME)/.muppet/muppet.tcl] } {

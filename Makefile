@@ -1,40 +1,64 @@
 NAME=muppet
-VERSION=1.3.1
-$(shell ./set-version-number.tcl ${NAME} ${VERSION})
 RELEASE=0
 MAINTAINER=hackers@qcode.co.uk
 REMOTEUSER=debian.qcode.co.uk
 REMOTEHOST=debian.qcode.co.uk
 REMOTEDIR=debian.qcode.co.uk
 
-.PHONY: all test
+define POSTINSTALL
+#!/bin/bash
+ln -sfT /usr/local/bin/muppet-${VERSION} /usr/local/bin/muppet
+chmod 655 /usr/local/bin/muppet-${VERSION}
+ln -sfT /etc/muppet-${VERSION}.tcl.sample /etc/muppet.tcl.sample
+endef
+export POSTINSTALL
+
+.PHONY: all test package
 
 all: test package upload clean
-package: 
-	 fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-2.0,iproute,tdom" --replaces none --conflicts none make install
+package: check-version
+	rm -rf package
+	mkdir package
+	curl --fail -K ~/.curlrc_github -L -o v$(VERSION).tar.gz https://api.github.com/repos/qcode-software/muppet/tarball/v$(VERSION)
+	tar --strip-components=1 --exclude Makefile --exclude description-pak --exclude muppet.tcl.conf --exclude doc --exclude package.tcl --exclude test --exclude test_all.tcl -xzvf v$(VERSION).tar.gz -C package
+	./package.tcl package ${NAME} ${VERSION}
+	./pkg_mkIndex package
+	@echo "$$POSTINSTALL" > ./postinstall-pak
+	fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-tcl-6.5.2,iproute,tdom" --replaces none --conflicts none make local-install
 
-test: 
-	./pkg_mkIndex tcl
+tcl-package: check-version
+	rm -rf package
+	mkdir package
+	./package.tcl package ${NAME} ${VERSION}
+	./pkg_mkIndex package
+
+test:   tcl-package 
 	tclsh ./test_all.tcl -testdir test
+	rm -rf package
 
-install: 
-	./pkg_mkIndex tcl
+install: tcl-package local-install
+
+local-install: check-version
 	mkdir -p /usr/lib/tcltk/$(NAME)$(VERSION)
 	rm -f /usr/lib/tcltk/$(NAME)$(VERSION)/*
-	cp tcl/*.tcl /usr/lib/tcltk/$(NAME)$(VERSION)/
+	cp package/*.tcl /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp LICENSE /usr/lib/tcltk/$(NAME)$(VERSION)/
 	cp bin/muppet /usr/local/bin/muppet-$(VERSION)
 	cp muppet.tcl.conf /etc/muppet-$(VERSION).tcl.sample
+	rm -rf package
 
-upload:
+upload: check-version
 	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER)@$(REMOTEHOST):$(REMOTEDIR)/debs"	
 	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb squeeze $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb wheezy $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 
-clean:
-	rm $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
-	rm postinstall-pak
+clean:  check-version
+	rm -f $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
+	rm -rf package
+	rm -f v$(VERSION).tar.gz
+	rm -f postinstall-pak
 
-uninstall:
-	rm -r /usr/lib/tcltk/$(NAME)$(VERSION)
-	rm /usr/local/bin/muppet
+check-version:
+ifndef VERSION
+    $(error VERSION is undefined. Usage make VERSION=x.x.x)
+endif

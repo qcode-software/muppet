@@ -1,9 +1,8 @@
-package provide muppet 1.3.1
 namespace eval muppet {
     namespace export *
 } 
 
-package require qcode
+package require qcode 6
 
 proc muppet::service {service action} {
     sh invoke-rc.d $service $action
