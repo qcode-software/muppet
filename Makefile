@@ -53,9 +53,10 @@ upload: check-version
 	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb wheezy $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 
 clean:  check-version
-	rm $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
+	rm -f $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 	rm -rf package
-	rm postinstall-pak
+	rm -f v$(VERSION).tar.gz
+	rm -f postinstall-pak
 
 check-version:
 ifndef VERSION
