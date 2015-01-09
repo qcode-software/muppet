@@ -11,7 +11,7 @@ REMOTEDIR=debian.qcode.co.uk
 
 all: test package upload clean
 package: 
-	 fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-2.0,iproute,tdom" --replaces none --conflicts none make install
+	 fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-tcl-6.5.2,iproute,tdom" --replaces none --conflicts none make install
 
 test: 
 	./pkg_mkIndex tcl

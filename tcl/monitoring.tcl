@@ -1,5 +1,5 @@
 package provide muppet 1.3.1
-package require qcode
+package require qcode 6
 namespace eval muppet {}
 
 proc muppet::disk_space_check { args } {
