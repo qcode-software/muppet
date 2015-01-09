@@ -1,4 +1,3 @@
-package provide muppet 1.3.1
 namespace eval muppet {
     namespace export *
 } 
