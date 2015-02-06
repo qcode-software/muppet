@@ -84,3 +84,18 @@ proc muppet::locale_set { locale charset } {
     # Set the default LANG
     sh update-locale "LANG=${locale}"
 }
+
+proc muppet::unattended_upgrades_install { { email "" } } {
+    #| Have instance automatically install Debian security updates
+    #| (apt-listchanges seems to have a bug where it will never write the /etc/apt/listchanges.conf
+    #| file again if the package has ever been installed (even if you purge it first. You need to 
+    #| run "ucf --purge /etc/apt/listchanges.conf" to allow the package to recreate it).
+    muppet::package_option unattended-upgrades unattended-upgrades/enable_auto_updates boolean true
+    muppet::package_option apt-listchanges apt-listchanges/frontend boolean true
+    muppet::package_option apt-listchanges apt-listchanges/confirm boolean false
+    muppet::package_option apt-listchanges apt-listchanges/which select both
+    if { $email ne "" } {
+        muppet::package_option apt-listchanges apt-listchanges/email-address string $email
+    }
+    install unattended-upgrades apt-listchanges
+}

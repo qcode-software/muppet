@@ -15,3 +15,4 @@ proc muppet::crontab {user {crontab ""}} {
 proc muppet::crontab_delete {user} {
     sh crontab -u $user -r
 }
+
