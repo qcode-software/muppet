@@ -30,8 +30,10 @@ export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
 $proxy_vars
 RUNDIR=/var/run/naviserver
 [ ! -d $RUNDIR ] && mkdir -p -m 755 $RUNDIR && chown nsd:nsd $RUNDIR
+CORE=0
+#CORE=9073741824
 NSD_EXE=/usr/lib/naviserver/bin/nsd
-exec $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
+exec softlimit -c $CORE $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
 }
     set proxy_vars [list]
     if { $proxy ne "" } {
