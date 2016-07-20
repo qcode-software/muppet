@@ -24,7 +24,7 @@ package: check-version
 	./package.tcl package ${NAME} ${VERSION}
 	./pkg_mkIndex package
 	@echo "$$POSTINSTALL" > ./postinstall-pak
-	fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-tcl-6.5.2,iproute,tdom" --replaces none --conflicts none make local-install
+	fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-tcl-6.52.1,iproute,tdom" --replaces none --conflicts none make local-install
 
 tcl-package: check-version
 	rm -rf package
