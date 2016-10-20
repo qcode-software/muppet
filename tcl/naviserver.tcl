@@ -23,7 +23,10 @@ proc muppet::naviserver_upgrade {} {
 
 proc muppet::naviserver_daemontools_run { args } {
     #| Naviserver start script
-    qc::args $args -proxy "" -- service 
+    qc::args $args -proxy "" -prebind "" -- service 
+    if { $prebind ne "" } {
+        set prebind "-b $prebind"
+    }
     set result {#!/bin/sh
 export LANG=en_GB.UTF-8
 export ENVIRONMENT=`grep "ENVIRONMENT" /etc/profile | sed "s;.*= *;;"`
@@ -33,7 +36,7 @@ RUNDIR=/var/run/naviserver
 CORE=0
 #CORE=9073741824
 NSD_EXE=/usr/lib/naviserver/bin/nsd
-exec softlimit -c $CORE $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
+exec softlimit -c $CORE $NSD_EXE $prebind -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.tcl 2>&1
 }
     set proxy_vars [list]
     if { $proxy ne "" } {
@@ -44,13 +47,14 @@ exec softlimit -c $CORE $NSD_EXE -u nsd -g nsd -i -t /home/nsd/$service/etc/nsd.
     }
     set result [string map [list \$service $service] $result]
     set result [string map [list \$proxy_vars [join $proxy_vars \n]] $result]
+    set result [string map [list \$prebind $prebind] $result]
     return $result
 }
 
 proc muppet::naviserver_service { args } {
-    qc::args $args -proxy "" -- service
+    qc::args $args -proxy "" -prebind "" -- service
     file mkdir /etc/nsd/$service
-    file_write /etc/nsd/$service/run [naviserver_daemontools_run -proxy $proxy $service] 0700
+    file_write /etc/nsd/$service/run [naviserver_daemontools_run -proxy $proxy -prebind "" $service] 0700
     file delete /etc/service/$service
     file_link /etc/service/$service /etc/nsd/$service
 }
