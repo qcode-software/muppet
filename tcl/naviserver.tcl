@@ -52,9 +52,9 @@ exec softlimit -c $CORE $NSD_EXE $prebind -u nsd -g nsd -i -t /home/nsd/$service
 }
 
 proc muppet::naviserver_service { args } {
-    qc::args $args -proxy "" -- service
+    qc::args $args -proxy "" -prebind "" -- service
     file mkdir /etc/nsd/$service
-    file_write /etc/nsd/$service/run [naviserver_daemontools_run -proxy $proxy $service] 0700
+    file_write /etc/nsd/$service/run [naviserver_daemontools_run -proxy $proxy -prebind "" $service] 0700
     file delete /etc/service/$service
     file_link /etc/service/$service /etc/nsd/$service
 }
