@@ -5,7 +5,7 @@
 
 package require Tcl 8.5
 package require muppet 
-package require qcode 6
+package require qcode 8
 namespace import {*}[qc::lexclude [info commands qc::*] ::qc::md5 ::qc::sha1]
 namespace import muppet::*
 
