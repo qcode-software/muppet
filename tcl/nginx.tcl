@@ -1,4 +1,4 @@
-package require qcode 6
+package require qcode 8
 namespace eval muppet {}
 
 proc muppet::nginx_defaults {} {

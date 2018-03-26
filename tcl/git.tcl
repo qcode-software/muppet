@@ -2,7 +2,7 @@ namespace eval muppet {
     namespace export *
 } 
 
-package require qcode 6
+package require qcode 8
 
 proc muppet::git_rev_parse {git_project_url revision} {
     #| Return full commit hash corresponding to revision.
