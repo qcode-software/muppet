@@ -23,6 +23,7 @@ proc muppet::aws { args } {
     # qc::aws_credentials_set [qc::param_get aws my_access_key] [qc::param_get my_secret_key]
     # qc::aws_region_set eu-west-1
     #
+    qc::args $args -json -- args
     if { [string match "ec2-*" $args] } {
         # Old EC2 CLI 
         #| Sets required AWS environment variables for these tools
@@ -42,7 +43,11 @@ proc muppet::aws { args } {
 
     } else {
         # New AWS unified CLI command
-        set ::env(AWS_DEFAULT_OUTPUT) "text"
+        if { [info exists json] } {
+            set ::env(AWS_DEFAULT_OUTPUT) "json"
+        } else {
+            set ::env(AWS_DEFAULT_OUTPUT) "text"
+        }
         return [exec aws {*}$args]
     }
 }
