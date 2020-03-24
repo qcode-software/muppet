@@ -47,6 +47,18 @@ proc muppet::aws { args } {
     }
 }
 
+proc muppet::aws_cli_tools_v2_install {} {
+    #| Install the Amazon Web Services unified command line interface tool.
+    install unzip
+    cd /tmp
+    file_download https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip
+    set unzip [qc::which unzip]
+    sh $unzip /tmp/awscli-exe-linux-x86_64.zip
+    sh /tmp/aws/install
+    file delete -force /tmp/aws
+    file delete /tmp/awscli-exe-linux-x86_64.zip
+}
+
 proc muppet::aws_cli_tools_install {} {
     #| Install the Amazon Web Services unified command line interface tool.
     install python unzip
