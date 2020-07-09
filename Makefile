@@ -1,9 +1,6 @@
 NAME=muppet
 RELEASE=0
 MAINTAINER=hackers@qcode.co.uk
-REMOTEUSER_LEGACY=debian.qcode.co.uk
-REMOTEHOST_LEGACY=debian.qcode.co.uk
-REMOTEDIR_LEGACY=debian.qcode.co.uk
 REMOTEUSER=deb
 REMOTEHOST=deb.qcode.co.uk
 REMOTEDIR=deb.qcode.co.uk
@@ -27,7 +24,7 @@ package: check-version
 	./package.tcl package ${NAME} ${VERSION}
 	./pkg_mkIndex package
 	@echo "$$POSTINSTALL" > ./postinstall-pak
-	fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.5,tcllib,qcode-tcl-8.20.0,iproute,tdom" --replaces none --conflicts none make local-install
+	fakeroot checkinstall -D --deldoc --backup=no --install=no --pkgname=$(NAME)-$(VERSION) --pkgversion=$(VERSION) --pkgrelease=$(RELEASE) -A all -y --maintainer $(MAINTAINER) --pkglicense="BSD" --reset-uids=yes --requires "tcl8.6,tcllib,qcode-tcl-10.11.0" --replaces none --conflicts none make local-install
 
 tcl-package: check-version
 	rm -rf package
@@ -51,10 +48,9 @@ local-install: check-version
 	rm -rf package
 
 upload: check-version
-	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER_LEGACY)@$(REMOTEHOST_LEGACY):$(REMOTEDIR_LEGACY)/debs"	
-	ssh $(REMOTEUSER_LEGACY)@$(REMOTEHOST_LEGACY) reprepro -b $(REMOTEDIR_LEGACY) includedeb jessie $(REMOTEDIR_LEGACY)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER)@$(REMOTEHOST):$(REMOTEDIR)/debs"	
 	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb stretch $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
+	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) copy buster stretch $(NAME)-$(VERSION)
 
 clean:  check-version
 	rm -f $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
