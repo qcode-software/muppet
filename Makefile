@@ -1,9 +1,6 @@
 NAME=muppet
 RELEASE=0
 MAINTAINER=hackers@qcode.co.uk
-REMOTEUSER_LEGACY=debian.qcode.co.uk
-REMOTEHOST_LEGACY=debian.qcode.co.uk
-REMOTEDIR_LEGACY=debian.qcode.co.uk
 REMOTEUSER=deb
 REMOTEHOST=deb.qcode.co.uk
 REMOTEDIR=deb.qcode.co.uk
@@ -51,10 +48,9 @@ local-install: check-version
 	rm -rf package
 
 upload: check-version
-	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER_LEGACY)@$(REMOTEHOST_LEGACY):$(REMOTEDIR_LEGACY)/debs"	
-	ssh $(REMOTEUSER_LEGACY)@$(REMOTEHOST_LEGACY) reprepro -b $(REMOTEDIR_LEGACY) includedeb jessie $(REMOTEDIR_LEGACY)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 	scp $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb "$(REMOTEUSER)@$(REMOTEHOST):$(REMOTEDIR)/debs"	
 	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb stretch $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
+	ssh $(REMOTEUSER)@$(REMOTEHOST) reprepro -b $(REMOTEDIR) includedeb buster $(REMOTEDIR)/debs/$(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
 
 clean:  check-version
 	rm -f $(NAME)-$(VERSION)_$(VERSION)-$(RELEASE)_all.deb
