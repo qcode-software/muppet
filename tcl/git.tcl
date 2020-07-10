@@ -2,8 +2,6 @@ namespace eval muppet {
     namespace export *
 } 
 
-package require qcode 8
-
 proc muppet::git_rev_parse {git_project_url revision} {
     #| Return full commit hash corresponding to revision.
     #| revision can be a partial commit hash, tag or branch.

@@ -1,5 +1,3 @@
-package require qcode 8
-
 # Load configuration file
 if { [info exists env(HOME)] && [file exists $env(HOME)/.muppet/muppet.tcl] } {
     source $env(HOME)/.muppet/muppet.tcl

@@ -1,4 +1,3 @@
-package require qcode 8
 namespace eval muppet {}
 
 proc muppet::disk_space_check { args } {
