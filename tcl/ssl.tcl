@@ -1,5 +1,4 @@
 package require fileutil
-package require qcode 8
 namespace eval muppet {
     namespace export *
 } 
